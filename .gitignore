@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.venv/
+hub.env
+*.log
+CASE-PAGE-DRAFT.md

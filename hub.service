@@ -1,0 +1,21 @@
+[Unit]
+Description=soele - self-hosted agent switchboard
+After=network-online.target
+
+[Service]
+User=root
+Environment=HOME=/root
+Environment=HUB_NODE=main
+# Config (and CLAUDE_CODE_OAUTH_TOKEN, chmod 600) lives here, NOT in this unit or the repo
+EnvironmentFile=-/etc/hub.env
+WorkingDirectory=/opt/soele
+ExecStart=/opt/soele/.venv/bin/uvicorn daemon:app --host 0.0.0.0 --port 8800
+Restart=always
+RestartSec=3
+# only kill the uvicorn process on restart, NOT the spawned agent turn children -
+# else a daemon restart/redeploy nukes any in-flight turn. Orphaned turns finish and
+# write their jsonl; the client picks them up via /transcript.
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target

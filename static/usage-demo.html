@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>usage components - demo</title>
+<link rel="stylesheet" href="/usage.css">
+<style>
+  body { margin: 0; background: #1f1f1e; color: #d6d6d4; min-height: 100vh;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 40px; box-sizing: border-box; }
+  h1 { font-size: 15px; font-weight: 500; color: #919190; margin: 0 0 24px; }
+  .cols { display: flex; gap: 48px; align-items: flex-start; flex-wrap: wrap; }
+  .col { flex: 0 1 auto; }
+  .caption { font-size: 12px; color: #6f6f6e; margin-bottom: 12px; }
+  /* Variant B sits on the settings/page surface, padded like a real settings panel */
+  .setwrap { background: #2c2c2a; border-radius: 12px; padding: 32px 36px; }
+</style>
+</head>
+<body>
+  <h1>Plan-usage components - fixture render (eyeball against the reference screenshots)</h1>
+  <div class="cols">
+    <div class="col">
+      <div class="caption">Variant A - compact popover</div>
+      <div id="pop"></div>
+    </div>
+    <div class="col" style="flex:1 1 600px; min-width:520px">
+      <div class="caption">Variant B - settings section</div>
+      <div class="setwrap"><div id="set"></div></div>
+    </div>
+  </div>
+
+<script src="/usage.js"></script>
+<script>
+  const NOW = Date.now() / 1000;
+  // next Friday 10:00 AM local
+  function nextFri10() {
+    const d = new Date(); d.setHours(10, 0, 0, 0);
+    do { d.setDate(d.getDate() + 1); } while (d.getDay() !== 5);
+    return Math.floor(d.getTime() / 1000);
+  }
+  const NEXT_FRI_10AM = nextFri10();
+
+  const fixture = {
+    plan: "Max (20x)",
+    captured_at: NOW - 8 * 60,   // "as of" stamp ~8 min ago
+    context_window: { used_tokens: 0, used_percentage: 0 },
+    limits: [
+      { id: "five_hour",       label: "5-hour limit",        used_percentage: 20, resets_at: NOW + 2*3600 + 49*60 },
+      { id: "seven_day",       label: "Weekly · all models", used_percentage: 42, resets_at: NEXT_FRI_10AM },
+      { id: "seven_day_oi",    label: "Weekly · Fable/Opus", used_percentage: 47, resets_at: NEXT_FRI_10AM },
+    ],
+  };
+
+  function paint() {
+    $pop.innerHTML = HubUsage.renderPopover(fixture);
+    $set.innerHTML = HubUsage.renderSettings(fixture);
+    const b = $pop.querySelector("[data-hu-expand]");
+    if (b) b.onclick = () => alert("onExpand -> would open the settings view");
+  }
+  const $pop = document.getElementById("pop"), $set = document.getElementById("set");
+  paint();
+  setInterval(paint, 60000);  // re-render countdowns every 60s
+</script>
+</body>
+</html>

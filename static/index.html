@@ -1,0 +1,3072 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content">
+<title>Soele</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#101014">
+<script>try{if(localStorage.getItem("hubLight")==="1")document.documentElement.classList.add("light");}catch(e){}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Soele">
+<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="apple-touch-icon" href="/icon-maskable-512.png">
+<link rel="stylesheet" href="/usage.css?v=7">
+<link rel="stylesheet" href="/vendor/xterm.css">
+<script src="/vendor/xterm.js"></script>
+<script src="/vendor/addon-fit.js"></script>
+<script src="/vendor/addon-webgl.js"></script>
+<style>
+  :root {
+    --bg: #101014; --side: #101014; --panel: #17171d; --line: #40404c; --fg: #d8d8de;
+    --rowline: #545462;   /* sidebar row divider: brighter than --line so rows read as separate */
+    --dim: #d8d8de; --acc: #FFC04B; --ok: #6faf7a; --warn: #e0b83c; --err: #c96a6a; --tool: #8a93c4;
+    --me: #1c2740; --me-line: #35538c;
+    --yellow: #FFC04B;
+    --ts: #9aa2d6;   /* message timestamp / date separator: de-emphasized via hue (cool blue-gray), not just low contrast */
+  }
+  /* light mode: --bg (main) + --side (sidebar) are the anchors; the rest is
+     derived for readable dark-on-light. Terminal (#term/xterm) stays dark by design. */
+  html.light {
+    --bg: #ECE7DB; --side: #D8E0D8; --panel: #F5F1E8; --line: #cfc7b6; --fg: #22201c;
+    --rowline: #b7ad97;   /* sidebar row divider: darker than --line so rows read as separate */
+    --dim: #22201c; --acc: #2f6fd0; --ok: #23623a; --warn: #b58a1e; --err: #983030; --tool: #3a4184;
+    --me: #dbe5f5; --me-line: #6f8fc8;
+    --yellow: #d09000;
+    --ts: #5a6099;   /* message timestamp / date separator: de-emphasized via hue (cool blue-gray), not just low contrast */
+  }
+  html.light #inputwrap:focus-within { border-color: #c8bfa8; }
+  html.light #attach:hover { background: #e6e0d1; }
+  html.light #modeBtn { color: #33487e; }
+  * { box-sizing: border-box; margin: 0; }
+  /* touch-action intersects down the ancestor chain, so pan-x/pan-y here kills pinch-zoom
+     and double-tap-zoom for every touch on the page. Firefox (which hosts the TWA when it
+     is the default browser) ignores user-scalable=no in the viewport meta - this it obeys. */
+  html, body { touch-action: pan-x pan-y; }
+  body { background: var(--bg); color: var(--fg); font: 14px/1.5 "Inter", system-ui, "Segoe UI", sans-serif; height: 100vh; height: 100dvh; display: flex; overflow: hidden; overscroll-behavior: none; }
+  #side { width: 330px; min-width: 250px; background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; position: relative; }
+  #side { font-weight: 500; }
+  #side header { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 5px; }
+  #side header b { color: var(--acc); font-size: 15px; letter-spacing: .5px; }
+  /* wordmark: b&w "Soele" with topographic contour rings around the letterforms
+     (paired strokes: ink ring then a --side gap stroke that erases its inside edge;
+     rings fade with distance). White-on-dark, near-black-on-light; never --acc. */
+  /* wordmark: a textured "soele" PNG (black glyphs, white flow-lines inside,
+     transparent outside). Dark mode inverts it -> white glyphs, dark lines. B&W only. */
+  #wordmark { flex: none; height: 20px; width: auto; filter: invert(1); }
+  html.light #wordmark { filter: none; }
+  #side header span { color: var(--dim); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* keep every header control on one line: never shrink or wrap ("+ new" was breaking to two lines) */
+  #side header button { flex: none; white-space: nowrap; padding: 6px 10px; }
+  #side header button:first-of-type { margin-left: auto; }
+  /* icon-only header controls: one uniform square so the ⌘ / theme / grid buttons all match */
+  #aliasbtn, #themebtn, #gridbtn, #sweepbtn, #archbtn, #newbtn { width: 30px; height: 30px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center; font-size: 15px; line-height: 1; }
+  #newbtn { font-size: 22px; font-weight: 400; }   /* single "+" glyph, sized to read as an action */
+  #aliasbtn svg, #themebtn svg, #gridbtn svg, #sweepbtn svg, #archbtn svg { width: 16px; height: 16px; display: block; }
+  #themebtn svg { width: 11px; height: 11px; }   /* the sun reads larger than the glyph siblings - shrink to match */
+  /* red dot on the sweep icon = a sweep you have not opened yet */
+  #sweepbtn { position: relative; }
+  #sweepbtn.hasnew::after { content: ""; position: absolute; top: 1px; right: 1px; width: 8px; height: 8px;
+    border-radius: 50%; background: var(--err); border: 1.5px solid var(--side); }
+  #enginetabs { display: flex; border-bottom: 1px solid var(--line); padding: 5px 8px; gap: 4px; background: var(--side); }
+  .tabbtn { flex: 1; padding: 4px; border: 1px solid transparent; border-radius: 4px; background: none; color: var(--dim); cursor: pointer; text-align: center; font-size: 11.5px; font-weight: 500; }
+  .tabbtn:hover { color: var(--fg); }
+  .tabbtn.active { background: var(--panel); border-color: var(--line); color: var(--acc); }
+  #usage { border-bottom: 1px solid var(--line); padding: 10px; }
+  #usage .hu-show { width: 100%; background: none; border: none; padding: 2px 4px; text-align: left;
+    color: var(--dim); font-size: 12.5px; cursor: pointer; }
+  #usage .hu-show:hover { color: var(--acc); }
+  #usage .hu-pop { margin-top: 8px; }
+  #usage .usage-section + .usage-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+  #usage .usage-service { color: var(--txt); font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  #ctbar { border-bottom: 1px solid var(--line); padding: 8px 14px; font-size: 12px; display: none; }
+  #ctbar .lib-show { width: 100%; background: none; border: none; padding: 2px 4px; text-align: left;
+    color: var(--dim); font-size: 12px; letter-spacing: .04em; cursor: pointer; }
+  #ctbar .lib-show:hover { color: var(--acc); }
+  #ctbar .lib-show .run { color: var(--ok); }
+  #swatch { position: fixed; z-index: 30; display: flex; gap: 5px; padding: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+  #swatch button { width: 20px; height: 20px; padding: 0; border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
+  #swatch button.sel { outline: 2px solid var(--fg); outline-offset: 1px; }
+  #list { overflow-y: auto; flex: 1; }
+  .sess { position: relative; overflow: hidden; border-bottom: 1px solid var(--rowline); }
+  /* .swrow is the visible surface; it slides horizontally on a touch-swipe to reveal the
+     action underlay (.swbg) behind it. Opaque background hides that underlay at rest. */
+  .swrow { position: relative; display: flex; align-items: flex-start; gap: 9px;
+    padding: 10px 14px; background: var(--side); cursor: pointer; touch-action: pan-y;
+    transition: transform .2s ease; }
+  .sess.dragging .swrow { transition: none; }
+  .sess:hover .swrow { background: var(--panel); }
+  .sess.active .swrow { background: var(--panel); border-left: 2px solid var(--acc); padding-left: 12px; }
+  .sess.sel .swrow { background: var(--me); }
+  /* swipe action underlay: swipe RIGHT reveals Delete (left edge), swipe LEFT reveals
+     Archive (right edge). The tint follows the active direction. */
+  .swbg { position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: space-between; padding: 0 18px; font-size: 12.5px; font-weight: 500; }
+  .swbg .swd { color: var(--err); }
+  .swbg .swa { color: var(--acc); margin-left: auto; }
+  .sess.sw-right .swbg { background: rgba(201,106,106,.18); }
+  .sess.sw-left  .swbg { background: rgba(217,120,72,.16); }
+  .sess .body { flex: 1; min-width: 0; }
+  .sess .t { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* inline rename: the title span becomes this input in place */
+  .sess .trename { display: block; width: 100%; font: inherit; color: var(--fg); background: var(--bg);
+    border: 1px solid var(--acc); border-radius: 4px; padding: 1px 5px; margin: -2px 0; outline: none; }
+  /* per-row pin: faint grey on the right of every row, full-colour 📌 once pinned */
+  .sess .pinbtn { flex: none; border: none; background: none; padding: 0 2px; margin-top: 1px;
+    font-size: 13px; line-height: 1; cursor: pointer; opacity: .72; filter: grayscale(1); }
+  .sess:hover .pinbtn { opacity: 1; }
+  .sess .pinbtn:hover { opacity: 1; filter: none; }
+  .sess.pinned .pinbtn { opacity: 1; filter: none; }
+  .sess .m { color: var(--dim); font-size: 11.5px; display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+  /* sidebar row dot. YELLOW + pulse = a live turn working (the airplane is on its way back).
+     GREEN steady = an idle session touched within 12h, waiting for your next prompt. Older
+     idle sessions get no dot. .run (running now) and .fresh (mtime <12h) are set at row build;
+     .run is listed last so a running-and-fresh session reads yellow, not green. */
+  .sess .rdot { display: none; flex: none; width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: var(--ok); }
+  .sess.fresh .rdot { display: block; }
+  .sess.run .rdot { display: block; background: var(--warn); animation: pulse 1.5s ease-out infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(224,184,60,.55); } 70% { box-shadow: 0 0 0 5px rgba(224,184,60,0); } 100% { box-shadow: 0 0 0 0 rgba(224,184,60,0); } }
+  /* desktop drag-reorder: the dragged row fades, a bar marks the drop slot */
+  .sess.rowdragging .swrow { opacity: .4; }
+  .sess.drop-before::before, .sess.drop-after::after { content: ""; position: absolute; left: 0; right: 0; height: 2px; background: var(--acc); z-index: 3; }
+  .sess.drop-before::before { top: 0; }
+  .sess.drop-after::after { bottom: 0; }
+  /* archive / trash drop targets, bottom-right of the list drawer; shown only while dragging a row */
+  #dropzone { display: none; position: absolute; right: 12px; bottom: 12px; z-index: 4; gap: 8px; }
+  body.listdrag #dropzone { display: flex; }
+  #dropzone .dz { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center;
+    justify-content: center; font-size: 20px; background: var(--panel); border: 1px solid var(--line);
+    box-shadow: 0 2px 10px rgba(0,0,0,.4); transition: transform .1s ease; }
+  #dropzone .dz.arch.over { border-color: var(--acc); background: rgba(217,120,72,.24); transform: scale(1.08); }
+  #dropzone .dz.del.over  { border-color: var(--err); background: rgba(201,106,106,.26); transform: scale(1.08); }
+  #dropzone .dz.stash.over { border-color: var(--dim); background: rgba(140,140,140,.22); transform: scale(1.08); }
+  /* stash drawer: a sticky footer row in the list; expanding grows the group upward above it */
+  #stashhead { display: flex; align-items: center; gap: 7px; padding: 9px 14px; cursor: pointer;
+    color: var(--dim); font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    border-top: 1px solid var(--line); background: var(--side); position: sticky; bottom: 0; z-index: 2; }
+  #stashhead:hover { color: var(--fg); }
+  #stashhead .chev { font-size: 9px; transition: transform .15s ease; }
+  #stashhead.open .chev { transform: rotate(90deg); }
+  .sess.stashed .swrow { opacity: .68; }
+  .sess.stashed .pinbtn { filter: none; }
+  .badge { color: var(--acc); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; font-size: 10.5px; line-height: normal; white-space: nowrap; display: inline-flex; align-items: center; }
+  /* engine/model tag: which service (Claude vs Antigravity) + model this chat runs. Shown
+     in sidebar rows, grid pane heads, and the chat top bar so it always reads at a glance. */
+  .eng { white-space: nowrap; font-weight: 600; }
+  .phead .eng { flex-shrink: 0; }
+  #engine { border: 1px solid var(--line); border-radius: 5px; padding: 0 9px; font-size: 11.5px;
+    font-weight: 600; cursor: pointer; background: var(--panel); gap: 5px; }
+  #engine:hover { border-color: var(--acc); }
+  #engine .car { color: var(--dim); font-weight: 400; }
+  #modelmenu { position: fixed; z-index: 40; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.4); padding: 5px; min-width: 150px;
+    max-height: 70vh; overflow-y: auto; }
+  #modelmenu .mi { display: block; width: 100%; text-align: left; border: none; background: none;
+    padding: 7px 10px; border-radius: 5px; font-size: 12.5px; color: var(--fg); cursor: pointer; }
+  #modelmenu .mi:hover { background: var(--me); }
+  #modelmenu .mi.on { color: var(--acc); }
+  #modelmenu .sep { border-top: 1px solid var(--line); margin: 4px 2px; }
+  #modelmenu .hd { padding: 4px 10px 2px; font-size: 10.5px; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; }
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  #top { padding: 10px 16px; border-bottom: 1px solid var(--line); color: var(--dim); font-size: 12.5px; display: flex; gap: 10px; align-items: center; min-height: 41px; }
+  #top .cwd { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+  /* every control in the header is the same-height rectangle (buttons, the node badge) */
+  #top button, #top .badge { height: 30px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+  #top button svg { display: block; }
+  /* explicit line-height, NOT `normal`: Inter's ascent (1984) dwarfs its descent (494), so
+     `normal` yields a taller, baseline-low line box in Firefox than Chrome and the glyphs float
+     up in the pill. A fixed line-height makes the flex-centered glyph box land the same in both. */
+  #top .badge { line-height: 1; }
+  #chat { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 18px 20px; min-height: 0; }
+  .ev { max-width: 860px; margin: 0 auto 10px; }
+  .me { background: var(--me); border: 1px solid var(--me-line); border-radius: 8px; padding: 8px 12px; white-space: pre-wrap; }
+  .me.pending { opacity: .5; }
+  .as { white-space: pre-wrap; padding: 0 2px; }
+  .dim { color: var(--dim); font-size: 12px; font-family: ui-monospace, Consolas, monospace; white-space: pre-wrap; }
+  .tool { color: var(--tool); font-size: 12px; font-family: ui-monospace, Consolas, monospace; }
+  .err { color: var(--err); font-size: 12.5px; }
+  .res { color: var(--ok); font-size: 12px; }
+  /* per-message local-time stamp, shown under the bubble/text; hover for full date+time */
+  .evts { display: block; font-size: 10.5px; color: var(--ts); margin-top: 3px; cursor: default; }
+  .me .evts { text-align: right; }
+  .as .evts { text-align: left; }
+  /* date separator between messages sent on different local days */
+  .datesep { max-width: 860px; margin: 14px auto; text-align: center; font-size: 11px;
+    color: var(--ts); text-transform: uppercase; letter-spacing: .05em; }
+  #composer { border-top: 1px solid var(--line); padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+  /* input row: the pill + the send circle, kept together and centered as a group so send
+     always sits right beside the field (not shoved to the far edge on a wide screen) */
+  #inrow { flex-basis: 100%; max-width: 860px; margin: 0 auto; display: flex; align-items: center; gap: 10px; }
+  /* the message field is one rounded pill holding the + attach button and the textarea */
+  #inputwrap { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 26px; padding: 3px 4px 3px 5px; }
+  #inputwrap:focus-within { border-color: #3a3a46; }
+  /* symmetric padding + min-height == one line box (14px * 1.5 + 2*13) keeps a single line
+     of text vertically centered; extra lines grow the field evenly from that center. */
+  textarea { flex: 1; background: none; color: var(--fg); border: none; padding: 13px 8px; font: inherit;
+    line-height: 1.5; resize: none; min-height: 47px; max-height: 180px; outline: none; }
+  /* no visible scrollbar in the composer (still scrolls past max-height on long messages) */
+  #input { scrollbar-width: none; }
+  #input::-webkit-scrollbar { display: none; }
+  #attach { flex: none; width: 38px; height: 38px; padding: 0; border: none; background: none;
+    border-radius: 50%; color: var(--dim); font-size: 21px; line-height: 1; align-self: center;
+    display: flex; align-items: center; justify-content: center; }
+  #attach svg { display: block; }
+  #attach:hover { color: var(--acc); background: #1e1e26; }
+  /* send / stop are bare glyphs (no filled disc): a gold airplane, then a gold square
+     while a turn runs. Only the queue state (typing mid-turn) keeps its filled pill. */
+  #send { flex: none; width: 42px; height: 42px; padding: 0; border-radius: 50%; align-self: center;
+    display: flex; align-items: center; justify-content: center; font-size: 22px; line-height: 1;
+    background: none; border-color: transparent; color: var(--acc); }
+  #send svg { display: block; }
+  #send:hover { background: none; border-color: transparent; color: #ffce70; }
+  html.light #send:hover, html.light #send.stop:hover { color: #1f56b0; }
+  button { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; font: inherit; font-size: 12.5px; cursor: pointer; }
+  button:hover { border-color: var(--acc); color: var(--acc); }
+  button:disabled { opacity: .4; cursor: default; }
+  #stop { display: none; border-color: var(--err); color: var(--err); width: 34px; padding: 0; }
+  .danger:hover { border-color: var(--err); color: var(--err); }
+  #empty { color: var(--dim); margin: auto; text-align: center; }
+  /* terminal mode: the real interactive claude TUI, streamed from a tmux-backed pty */
+  #term { flex: 1; min-height: 0; display: none; background: #0b0b0f; padding: 4px 4px 0; touch-action: none; }
+  #term .xterm { height: 100%; padding: 2px 4px; }
+  #keybar { display: none; gap: 6px; padding: 7px 8px; border-top: 1px solid var(--line);
+    overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+  #keybar button { padding: 8px 11px; font-size: 13px; flex: 0 0 auto; min-width: 40px; }
+  #keybar button.on { border-color: var(--acc); color: var(--acc); background: #2a2114; }
+  /* mode toggle: both view icons in one pill, the CURRENT view highlighted, click switches */
+  #modeBtn { border-color: var(--me-line); color: #8fb0ee; padding: 0 3px; gap: 2px; }
+  #modeBtn .mseg { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 4px; color: var(--dim); }
+  #modeBtn .mseg.on { color: #eaf0fb; background: var(--me-line); }
+  html.light #modeBtn .mseg.on { color: #fff; }
+  #spin { display: none; color: var(--acc); font-size: 12px; }
+  #ctx { font-size: 11.5px; color: var(--dim); font-family: ui-monospace, Consolas, monospace; white-space: nowrap; }
+  #drawer { display: none; }   /* desktop: controls live in #top; the drawer is mobile-only */
+  #send.queue { background: var(--me-line); border-color: var(--me-line); color: #eaf0fb; }
+  #send.queue:hover { background: #3f61a3; border-color: #3f61a3; color: #eaf0fb; }
+  #send.stop { background: none; border-color: transparent; color: var(--acc); }
+  #send.stop:hover { background: none; border-color: transparent; color: #ffce70; }
+  #queuebar { flex-basis: 100%; display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px;
+    font-size: 12px; color: var(--dim); }
+  #queuebar .qrow { display: flex; align-items: flex-start; gap: 8px; min-width: 0; max-width: 100%;
+    background: var(--me); border: 1px solid var(--me-line); border-radius: 6px; padding: 5px 10px; }
+  #queuebar .qhint { flex-shrink: 0; opacity: .7; }
+  /* wrap up to 3 lines then clamp; overflow-wrap:anywhere so an unbroken string (URL,
+     path) can never widen the row and push the ✕ off-screen */
+  #queuebar .qtext { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere;
+    overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+  #queuebar button { padding: 1px 7px; font-size: 12px; flex-shrink: 0; }
+  #attachbar { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  #attachbar .chip { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg);
+    background: var(--me); border: 1px solid var(--me-line); border-radius: 6px; padding: 3px 4px 3px 9px; }
+  #attachbar .chip.up { opacity: .5; }
+  #attachbar .chip button { border: none; background: none; padding: 0 4px; font-size: 13px; color: var(--dim); cursor: pointer; }
+  #attachbar .chip button:hover { color: var(--err); }
+  #waitbar { display: none; flex-wrap: wrap; gap: 6px; padding: 6px 16px; border-bottom: 1px solid var(--line); }
+  #waitbar .chip { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg);
+    background: var(--me); border: 1px solid var(--me-line); border-radius: 6px; padding: 3px 4px 3px 9px; }
+  #waitbar .chip button { border: none; background: none; padding: 0 4px; font-size: 13px; color: var(--dim); cursor: pointer; }
+  #waitbar .chip button:hover { color: var(--err); }
+  #modal, #tmodal, #aliasbox, #sweepbox, #archivedbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 5; overflow-y: auto; }
+  #modal .box, #tmodal .box, #aliasbox .box, #sweepbox .box, #archivedbox .box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; max-width: 420px; margin: 12vh auto; max-height: 82vh; overflow-y: auto; padding: 18px; }
+  #modal h3, #tmodal h3, #aliasbox h3, #sweepbox h3, #archivedbox h3 { font-size: 14px; margin-bottom: 12px; color: var(--fg); }
+  /* sweep modal: the reviewer's per-chat gists + archive/delete suggestions, expandable, approve-only */
+  #sweepbox .box { max-width: 560px; }
+  #sweepbox .shead { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: var(--dim); font-size: 12px; }
+  #sweepbox .shead span:first-child { flex: 1; }
+  #sweepbox .shead button { padding: 4px 10px; font-size: 12px; }
+  .swp { border: 1px solid var(--line); border-radius: 7px; margin-bottom: 7px; }
+  .swp .top { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; cursor: pointer; }
+  .swp input[type=checkbox] { margin-top: 3px; flex: none; }
+  .swp .t { display: block; font-size: 13px; }
+  .swp .gist { display: block; color: var(--dim); font-size: 12px; margin-top: 2px; }
+  .swp .detail { display: none; margin: 0 10px 9px; padding-top: 7px; color: var(--dim); font-size: 12px;
+    white-space: pre-wrap; border-top: 1px dashed var(--line); }
+  .swp.x .detail { display: block; }
+  .swp .rec { flex: none; font-size: 10.5px; border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; }
+  .swp .rec.delete { color: var(--err); border-color: var(--err); }
+  .swp .rec.archive { color: var(--acc); border-color: var(--acc); }
+  .swp .rec.keep { color: var(--ok); border-color: var(--ok); }
+  #archivedbox .box { max-width: 480px; }
+  .arow { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 7px;
+    padding: 8px 10px; margin-bottom: 7px; }
+  .arow .who { flex: 1; min-width: 0; }
+  .arow .t { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .arow .sub { display: block; color: var(--dim); font-size: 12px; margin-top: 2px; }
+  .arow button { flex: none; padding: 4px 10px; font-size: 12px; }
+  #archivedbox .amsg { color: var(--dim); font-size: 13px; padding: 6px 2px; }
+  #archivedbox .row { display: flex; justify-content: flex-end; margin-top: 12px; }
+  #aliasbox .box { max-width: 480px; }
+  #aliasbox input[type=text] { width: 100%; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 5px; padding: 6px 8px; margin-bottom: 10px; font: inherit; font-size: 13px; }
+  #aliasbox .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+  #ctbox { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 5; overflow-y: auto; }
+  #ctbox .box { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; max-width: 520px; margin: 12vh auto; max-height: 82vh; overflow-y: auto; padding: 18px; }
+  #ctbox h3 { font-size: 14px; margin-bottom: 12px; color: var(--fg); }
+  #ctgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px; }
+  #ctbox .cthdr { grid-column: 1 / -1; color: var(--dim); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; margin: 6px 0 0; }
+  #ctbox .cthdr:first-child { margin-top: 0; }
+  .ctcard { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; min-width: 0; }
+  .ctcard .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); flex: none; }
+  .ctcard.up .dot { background: var(--ok); }
+  .ctcard .ctname { cursor: pointer; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ctcard button { border: none; background: none; padding: 0 2px; font-size: 12px; color: var(--dim); cursor: pointer; flex: none; }
+  .ctcard button:hover { color: var(--acc); }
+  #ctbox .amsg { color: var(--dim); font-size: 12px; padding: 8px 0; }
+  #ctbox .row { display: flex; gap: 8px; justify-content: space-between; align-items: center; margin-top: 14px; }
+  .anode { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--acc); margin: 12px 0 5px; }
+  .anode:first-child { margin-top: 0; }
+  .arow { display: flex; gap: 10px; padding: 4px 6px; border-radius: 5px; cursor: pointer; align-items: baseline;
+    font: 12.5px/1.4 ui-monospace, Consolas, monospace; }
+  .arow:hover { background: var(--bg); }
+  .arow.copied { background: var(--acc); }
+  .aname { color: var(--fg); font-weight: 600; flex: 0 0 auto; }
+  .aval { color: var(--fg); opacity: .62; overflow-wrap: anywhere; min-width: 0; }
+  .arow.copied .aname, .arow.copied .aval { color: #fff; opacity: 1; }
+  .arun { margin-left: auto; flex: 0 0 auto; align-self: center; background: var(--bg); color: var(--fg);
+    border: 1px solid var(--line); border-radius: 4px; padding: 2px 9px; cursor: pointer; font: inherit;
+    font-size: 11.5px; opacity: .75; }
+  .arun:hover { opacity: 1; border-color: var(--acc); color: var(--acc); }
+  .arow.copied .arun { background: rgba(255,255,255,.15); color: #fff; border-color: rgba(255,255,255,.4); }
+  .arun.ok { color: #2ea043; border-color: #2ea043; opacity: 1; }
+  .arun.err { color: #e5534b; border-color: #e5534b; opacity: 1; }
+  .aout { font: 11.5px/1.4 ui-monospace, Consolas, monospace; color: var(--dim); padding: 1px 6px 6px;
+    white-space: pre-wrap; overflow-wrap: anywhere; }
+  .amsg { color: var(--fg); opacity: .6; font-size: 13px; padding: 8px 2px; }
+  #tmodal .box { max-width: 680px; width: calc(100% - 24px); }
+  #tmodal .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+  #tmodal .url { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  #tmodal .url code { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 12px;
+    font-family: ui-monospace, Consolas, monospace; color: var(--fg); }
+  #tmodal textarea { width: 100%; height: 55vh; max-height: none; background: var(--bg);
+    font: 13px/1.4 ui-monospace, Consolas, monospace; white-space: pre;
+    -webkit-user-select: text; user-select: text; }
+  #modal label { display: block; padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 6px; cursor: pointer; font-size: 13px; }
+  #modal label:hover { border-color: var(--acc); }
+  #modal input[type=text] { width: 100%; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 5px; padding: 5px 8px; margin-top: 6px; font: inherit; font-size: 12.5px; }
+  #modal .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+  /* grid mode (desktop): up to 6 chats side by side. Each cell is an iframe running this
+     same page in pane mode (?pane=1) - a fully live chat with the sidebar chrome hidden -
+     so the parent only lays panes out; all chat state stays per-iframe. */
+  #grid { display: none; flex: 1; min-width: 0; gap: 1px; background: var(--line); grid-auto-flow: column; }
+  body.grid #main { display: none; }
+  body.grid #grid { display: grid; }
+  .pane { position: relative; min-width: 0; min-height: 0; background: var(--bg); display: flex; flex-direction: column; }
+  .pane iframe { width: 100%; flex: 1; min-height: 0; border: 0; display: block; }
+  /* slim parent-rendered title strip per pane: badge + session title + close */
+  .phead { display: flex; align-items: center; gap: 6px; padding: 5px 9px; min-height: 30px;
+    font-size: 14px; background: var(--panel); border-bottom: 1px solid var(--line); cursor: grab; }
+  /* drag a pane by its title strip onto another pane to swap the two.
+     While a drag is live, iframes must not see the pointer or they eat the dragover events. */
+  body.griddrag .pane iframe { pointer-events: none; }
+  .pane.dropt { outline: 2px solid var(--acc); outline-offset: -2px; }
+  .pane.changed { outline: 2px solid var(--yellow); outline-offset: -2px; }
+  .phead .pt { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg); }
+  .phead button { border: none; background: none; padding: 0 3px; font-size: 12px; color: var(--dim); cursor: pointer; }
+  .phead button:hover { color: var(--err); }
+  #gridempty { color: var(--dim); margin: auto; text-align: center; grid-column: 1 / -1; }
+  #gridbtn.on { border-color: var(--acc); color: var(--acc); }
+  /* pane mode: this page IS one grid cell - just the chat, no sidebar/list chrome */
+  body.pane #side, body.pane #menu, body.pane #backdrop { display: none; }
+  body.pane #drawer { display: none; }   /* a narrow grid pane is not a phone - keep controls in #top */
+  .only-mobile { display: none; }
+  /* #menu is a `#top button`, whose blanket display:inline-flex (1,0,1) outranks
+     .only-mobile (0,1,0) - so hide it with a matching-specificity rule, not the class */
+  #top #menu { display: none; }
+  #backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 15; }
+  @media (max-width: 700px) {
+    .only-mobile { display: inline-block; }
+    .only-desktop { display: none; }
+    #side { position: fixed; top: 0; right: 0; bottom: 0; width: 82%; max-width: 330px; z-index: 20;
+            border-right: none; border-left: 1px solid var(--line);
+            transform: translateX(100%); transition: transform .2s ease; }
+    body.nav-open #side { transform: none; }
+    #top #menu { display: inline-flex; order: 99; margin-left: auto; }   /* hamburger on the right, matching the drawer */
+    body.nav-open #backdrop { display: block; }
+    #chat { padding: 14px 12px; }
+    #top { padding: 8px 12px; }
+    #top .cwd { display: none; }          /* long path crowds the button row; chat is already chosen */
+    #composer { padding: 10px 12px; }
+    /* roomier tap targets + a taller field on a phone */
+    textarea { min-height: 56px; padding: 16px 8px; }   /* 16px * 1.5 line + 2*16 pad == 56, so one line centers */
+    #attach { width: 42px; height: 42px; font-size: 23px; }
+    #send { width: 48px; height: 48px; font-size: 25px; }
+    /* 16px avoids iOS Safari auto-zooming the page every time you focus an input */
+    textarea, #modal input[type=text] { font-size: 16px; }
+    /* the drawer: an always-visible horizontal strip of the top-bar controls, sitting just
+       above the bottom bar. It's an ordinary flex row in #main (NOT an overlay), so #chat's
+       scroll area ends above it and messages never hide behind it. `order` floats it above
+       whichever bar is showing (composer in chat mode, keybar in terminal mode); #chat/#term
+       stay above at order 0. It's at the bottom of the vv-sized column, so it rides the keyboard. */
+    #drawer { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center;
+      justify-content: flex-end; gap: 8px; padding: 6px 12px; order: 1;
+      border-top: 1px solid var(--line); background: var(--bg); }
+    #drawer:empty { display: none; }   /* no chat open / controls elsewhere: no empty strip */
+    #keybar, #composer { order: 2; }   /* the input bar sits below the drawer strip */
+    /* moved-in controls lose the #top button rules once reparented - restore height/centering */
+    #drawer button, #drawer .badge { min-height: 34px; display: inline-flex;
+      align-items: center; justify-content: center; gap: 6px; line-height: 1; padding: 4px 12px; }
+    #drawer button svg { display: block; }
+    /* the pause button already signals a running turn - drop the redundant "running…" text on
+       mobile (!important beats the inline display setRunning writes). */
+    #spin { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<div id="backdrop" onclick="closeNav()"></div>
+<div id="side">
+  <header><img id="wordmark" src="/wordmark.png" alt="Soele"><span id="nodename"></span>
+    <button id="aliasbtn" onclick="openAliases()" title="aliases">⌘</button>
+    <button id="sweepbtn" onclick="openSweep()" title="session sweep: an LLM reviews each chat, you approve cleanup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19.5" y1="4.5" x2="12" y2="12"></line><path d="M9.9 9.9 L14.1 14.1 L9.5 20.9 L3.1 14.5 Z"></path><line x1="12" y1="12" x2="6.3" y2="17.7"></line><line x1="10.4" y1="10.9" x2="4.7" y2="16.1"></line><line x1="13.1" y1="13.6" x2="7.9" y2="19.3"></line></svg></button>
+    <button id="archbtn" onclick="openArchived()" title="archived chats: view and restore"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="3.5" width="19" height="5" rx="1"></rect><path d="M4.5 8.5 V19.5 a1 1 0 0 0 1 1 H18.5 a1 1 0 0 0 1 -1 V8.5"></path><line x1="10" y1="12.5" x2="14" y2="12.5"></line></svg></button>
+    <button id="themebtn" onclick="toggleTheme()" title="light / dark"></button>
+    <button id="gridbtn" class="only-desktop" onclick="toggleGrid()" title="grid view: multiple chats at once (up to 2 rows, left to right)">⊞</button>
+    <button id="newbtn" onclick="openModal()" title="new chat">+</button></header>
+  <div id="enginetabs">
+    <button class="tabbtn" id="tab-claude" onclick="setEngineFilter('claude')">claude</button>
+    <button class="tabbtn" id="tab-codex" style="display:none" onclick="setEngineFilter('codex')">codex</button>
+    <button class="tabbtn" id="tab-local" onclick="setEngineFilter('local')">local</button>
+  </div>
+  <div id="usage" style="display:none"></div>
+  <div id="ctbar"></div>
+  <div id="list"></div>
+  <div id="dropzone">
+    <div class="dz stash" data-act="stash" title="drop here to stash">📦</div>
+    <div class="dz arch" data-act="archive" title="drop here to archive">🗄</div>
+    <div class="dz del" data-act="delete" title="drop here to delete">🗑</div>
+  </div>
+</div>
+<div id="main">
+  <div id="top">
+    <button id="menu" class="only-mobile" onclick="toggleNav()" title="chats">☰</button>
+    <span class="cwd" id="tcwd"></span>
+    <span id="ctx" title="container / node"></span>
+    <button id="engine" style="display:none" onclick="openModelMenu(event)" title="service / model - click to change model"></button>
+    <span id="spin">running…</span>
+    <button id="stop" onclick="interrupt()" title="stop"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg></button>
+    <button id="modeBtn" style="display:none" onclick="toggleMode()" title="switch chat / terminal view">
+      <span class="mseg" data-m="chat"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>
+      <span class="mseg" data-m="term"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg></span>
+    </button>
+  </div>
+  <div id="waitbar" style="display:none"></div>
+  <div id="chat"><div id="empty">pick a chat, or + new</div></div>
+  <div id="term"></div>
+  <div id="keybar">
+    <button onclick="kb('\x1b')">Esc</button>
+    <button onclick="kb('\t')">Tab</button>
+    <button onclick="kb('\x1b[Z')" title="shift-tab (cycle mode)">⇧Tab</button>
+    <button id="ctrlBtn" onclick="toggleCtrl()" title="Ctrl for next key">Ctrl</button>
+    <button onclick="kb('\x1b[A')">↑</button>
+    <button onclick="kb('\x1b[B')">↓</button>
+    <button onclick="kb('\x1b[D')">←</button>
+    <button onclick="kb('\x1b[C')">→</button>
+    <button onclick="kb('\x03')" title="Ctrl-C">^C</button>
+    <button onclick="grabUrls()" title="copy a URL from the screen (de-wrapped)">🔗</button>
+    <button onclick="copyView()" title="select / copy screen text">⧉</button>
+    <button onclick="$('file').click()" title="attach file">📎</button>
+    <button onclick="if(term)term.focus()" title="keyboard">⌨</button>
+  </div>
+  <div id="composer">
+    <div id="queuebar" style="display:none"></div>
+    <div id="attachbar" style="display:none"></div>
+    <input type="file" id="file" multiple style="display:none" onchange="pickFiles(this.files)">
+    <div id="inrow">
+      <div id="inputwrap">
+        <button id="attach" onclick="$('file').click()" title="attach file"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
+        <textarea id="input" placeholder="message…" rows="1"></textarea>
+      </div>
+      <button id="send" onclick="composerAction()" title="send"><svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button>
+    </div>
+  </div>
+  <!-- mobile only: the top-bar controls live here as an always-visible horizontal strip just
+       above the bottom bar (composer OR terminal keybar), thumb-reachable. It's a real flex row
+       (CSS `order` floats it above the bar), so #chat scrolls above it. Desktop keeps the
+       controls in #top (see layoutControls). -->
+  <div id="drawer"></div>
+</div>
+<div id="grid"></div>
+
+<div id="tmodal" onclick="if(event.target===this)closeTmodal()">
+  <div class="box">
+    <h3 id="tmtitle"></h3>
+    <div id="tmbody"></div>
+    <div class="row" id="tmrow"><button onclick="closeTmodal()">close</button></div>
+  </div>
+</div>
+
+<div id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="box">
+    <h3>new chat</h3>
+    <div id="targets"></div>
+    <div class="row" style="margin: 12px 0; font-size: 0.9em; opacity: 0.85; display: flex; align-items: center; justify-content: flex-start; gap: 12px;">
+      <span>engine:</span>
+      <label style="cursor: pointer; display: inline-flex; align-items: center; gap: 4px;"><input type="radio" name="engine" value="default" checked> default</label>
+      <label style="cursor: pointer; display: inline-flex; align-items: center; gap: 4px;"><input type="radio" name="engine" value="claude"> Claude</label>
+      <label id="engine-codex" style="cursor: pointer; display: inline-flex; align-items: center; gap: 4px;"><input type="radio" name="engine" value="codex"> Codex</label>
+    </div>
+    <div class="row"><button onclick="closeModal()">cancel</button><button onclick="createChat()">create</button></div>
+  </div>
+</div>
+
+<div id="aliasbox" onclick="if(event.target===this)closeAliases()">
+  <div class="box">
+    <h3>aliases</h3>
+    <input id="aliasfilter" type="text" placeholder="filter" autocomplete="off" oninput="renderAliases()">
+    <div id="aliaslist"></div>
+    <div class="row"><button onclick="closeAliases()">close</button></div>
+  </div>
+</div>
+
+<div id="sweepbox" onclick="if(event.target===this)closeSweep()">
+  <div class="box">
+    <h3>session sweep</h3>
+    <div class="shead"><span id="sweepstat">…</span><button id="sweeprun" onclick="runSweepNow()">run now</button></div>
+    <div id="sweeplist"></div>
+    <div class="row"><button id="sweepapply" disabled onclick="applySweep()">apply</button><button onclick="closeSweep()">close</button></div>
+  </div>
+</div>
+
+<div id="archivedbox" onclick="if(event.target===this)closeArchived()">
+  <div class="box">
+    <h3>archived chats</h3>
+    <div id="archivedlist"><div class="amsg">loading…</div></div>
+    <div class="row"><button onclick="closeArchived()">close</button></div>
+  </div>
+</div>
+
+<div id="ctbox" onclick="if(event.target===this)closeCTs()">
+  <div class="box">
+    <h3>library workers</h3>
+    <div id="ctgrid"></div>
+    <div class="row">
+      <button onclick="newWorker()">+ worker</button>
+      <button onclick="closeCTs()">close</button>
+    </div>
+  </div>
+</div>
+
+<script src="/usage.js?v=3"></script>
+<script>
+let hubNode = "gateway", libNode = null;   // placeholder until /api/node answers
+let defNode = null;   // HUB_DEFAULT_NODE from /api/node: where fresh chats land (falls back to hubNode)
+// the gateway's declared default only counts once we can actually route to it
+function defaultTarget() { return (defNode && (defNode === hubNode || defNode in peerInfo)) ? defNode : hubNode; }
+let codexNodes = new Set();     // nodes whose daemon found a codex binary (/api/node .codex)
+let peerInfo = {};              // peer name -> its /api/node answer ({node, cts}); classifies library vs plain nodes
+let nodeLabels = {};            // routing node name -> friendly display label (HUB_LABEL); routing still uses the real name
+// The node name shown to the user. Routing keys stay the real node (soele/library/...);
+// this only prettifies the badge/target/sidebar so the container name never leaks into the UI.
+function dispNode(node) { return nodeLabels[node] || node; }
+let sessions = [], cts = [];
+let deletedIds = new Set();     // locally deleted/archived - stay hidden until the server list drops them
+let pinned = new Set();         // pinned sids - synced via the gateway origin's /api/pins so every device agrees
+// localStorage is a first-paint CACHE only (instant, offline-friendly); the server set wins on load + refresh.
+try { pinned = new Set(JSON.parse(localStorage.getItem("hubPinned") || "[]")); } catch (e) {}
+function cachePins() { try { localStorage.setItem("hubPinned", JSON.stringify([...pinned])); } catch (e) {} }
+// Pull the shared pin set and repaint if it changed (called on load + each refresh).
+async function syncPins() {
+  try {
+    const ids = (await (await fetch("/api/pins")).json()).ids || [];
+    const next = new Set(ids);
+    if (next.size !== pinned.size || [...next].some(id => !pinned.has(id))) {
+      pinned = next; cachePins(); renderList();
+    } else { pinned = next; cachePins(); }
+  } catch (e) {}
+}
+// Stash: the "side folder". Stashed chats leave the main list and fold into a collapsed
+// drawer at the bottom of the sidebar - out of the way, not gone. Nothing moves on disk;
+// this is purely a sidebar grouping, synced across devices exactly like pins.
+let stashed = new Set();
+try { stashed = new Set(JSON.parse(localStorage.getItem("hubStash") || "[]")); } catch (e) {}
+function cacheStash() { try { localStorage.setItem("hubStash", JSON.stringify([...stashed])); } catch (e) {} }
+async function syncStash() {
+  try {
+    const ids = (await (await fetch("/api/stash")).json()).ids || [];
+    const next = new Set(ids);
+    if (next.size !== stashed.size || [...next].some(id => !stashed.has(id))) {
+      stashed = next; cacheStash(); renderList();
+    } else { stashed = next; cacheStash(); }
+  } catch (e) {}
+}
+// Custom titles: per-chat rename. {sid: title} overlaid on the derived title at render time,
+// synced across devices via the origin store exactly like pins. Empty = no override.
+let titles = {};
+try { titles = JSON.parse(localStorage.getItem("hubTitles") || "{}") || {}; } catch (e) {}
+function cacheTitles() { try { localStorage.setItem("hubTitles", JSON.stringify(titles)); } catch (e) {} }
+function dispTitle(s) { return (s && titles[s.id]) || (s && s.title) || ""; }
+async function syncTitles() {
+  try {
+    const next = (await (await fetch("/api/titles")).json()).titles || {};
+    if (JSON.stringify(next) !== JSON.stringify(titles)) { titles = next; cacheTitles(); renderList(); }
+  } catch (e) {}
+}
+let stashOpen = localStorage.getItem("hubStashOpen") === "1";
+// Manual chat order (desktop drag-reorder), server-synced like pins - an ORDERED list of
+// sids the client PUTs whole on each drop. Sorts AFTER pins; sids not in the list are
+// "unarranged" and stay in server mtime order, floating above the arranged block (so a new
+// chat still surfaces at the top). Empty list = pure recency, unchanged behaviour.
+let order = [];
+try { order = JSON.parse(localStorage.getItem("hubOrder") || "[]"); if (!Array.isArray(order)) order = []; } catch (e) { order = []; }
+function cacheOrder() { try { localStorage.setItem("hubOrder", JSON.stringify(order)); } catch (e) {} }
+function persistOrder() {
+  fetch("/api/order", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: order }) }).catch(() => {});
+}
+async function syncOrder() {
+  try {
+    const ids = (await (await fetch("/api/order")).json()).ids || [];
+    if (ids.length !== order.length || ids.some((id, i) => order[i] !== id)) {
+      order = ids; cacheOrder(); renderList();
+    }
+  } catch (e) {}
+}
+const IS_DESKTOP = matchMedia("(hover: hover) and (pointer: fine)").matches;
+// ---- desktop drag-reorder + drag-to-archive/trash (#dropzone) ----
+let rowDragId = null;
+function clearDropMarks() {
+  for (const d of document.querySelectorAll("#list .drop-before, #list .drop-after"))
+    d.classList.remove("drop-before", "drop-after");
+}
+function reorderRow(dragSid, targetSid, before) {
+  // stash rows may be visible at the end of `rendered`; keep them out of the manual order
+  const seq = rendered.filter(s => !stashed.has(s.id)).map(s => s.id).filter(id => id !== dragSid);
+  let i = seq.indexOf(targetSid);
+  if (i < 0) return;
+  if (!before) i += 1;
+  seq.splice(i, 0, dragSid);
+  const hidden = order.filter(id => !seq.includes(id));   // keep arrangement of filtered-out sids
+  order = [...seq, ...hidden];
+  cacheOrder(); persistOrder(); renderList();
+}
+function initRowDrag() {
+  const list = $("list");
+  list.addEventListener("dragstart", e => {
+    const r = e.target.closest(".sess"); if (!r || !r.draggable) return;
+    rowDragId = r.dataset.sid;
+    r.classList.add("rowdragging");
+    document.body.classList.add("listdrag");
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", rowDragId); } catch (_) {}
+  });
+  list.addEventListener("dragover", e => {
+    if (!rowDragId) return;
+    const r = e.target.closest(".sess"); if (!r || r.dataset.sid === rowDragId) return;
+    e.preventDefault(); e.dataTransfer.dropEffect = "move";
+    const before = (e.clientY - r.getBoundingClientRect().top) < r.offsetHeight / 2;
+    clearDropMarks();
+    r.classList.add(before ? "drop-before" : "drop-after");
+  });
+  list.addEventListener("drop", e => {
+    if (!rowDragId) return;
+    const r = e.target.closest(".sess"); if (!r || r.dataset.sid === rowDragId) return;
+    e.preventDefault();
+    reorderRow(rowDragId, r.dataset.sid, r.classList.contains("drop-before"));
+  });
+  list.addEventListener("dragend", () => {
+    document.querySelectorAll("#list .rowdragging").forEach(d => d.classList.remove("rowdragging"));
+    clearDropMarks();
+    document.body.classList.remove("listdrag");
+    rowDragId = null;
+    swipeConsumedAt = Date.now();   // a drag can be followed by a click - don't let it open the chat
+  });
+  for (const dz of $("dropzone").querySelectorAll(".dz")) {
+    // dropEffect MUST match effectAllowed ("move") or the browser rejects the drop with a
+    // no-drop cursor (Firefox is strict) - same line the row dragover already sets.
+    dz.addEventListener("dragover", e => { if (rowDragId) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; dz.classList.add("over"); } });
+    dz.addEventListener("dragleave", () => dz.classList.remove("over"));
+    dz.addEventListener("drop", e => {
+      if (!rowDragId) return;
+      e.preventDefault(); dz.classList.remove("over");
+      if (dz.dataset.act === "stash") { if (!stashed.has(rowDragId)) toggleStash(rowDragId); }
+      else rowAction(rowDragId, dz.dataset.act);
+    });
+  }
+}
+let usageHidden = localStorage.getItem("hubUsageHidden") === "1";  // collapse the plan-usage panel
+// Exclusive tabs (not toggles): exactly ONE is active and clicking a tab shows only that
+// group. Anything unrecognised (legacy comma-set/"all"/"gemini") -> "claude".
+const ENGINE_TABS = ["claude", "codex", "local"];
+let engineFilter = localStorage.getItem("hubEngineFilter") || "claude";
+if (!ENGINE_TABS.includes(engineFilter)) engineFilter = "claude";
+let cur = null, sock = null, running = false;
+let queue = [];                 // pending follow-up messages - MIRRORS the host queue (source of truth)
+let waits = [];                 // pending soele-wait watches for the open chat - MIRRORS the host registry
+let pendingEcho = [];           // optimistic user lines shown before the disk tail confirms them
+let attachments = [];           // uploaded files pending on the next send: {name, path} (path=null while uploading)
+let turnIn = 0;                 // latest full context (incl. cache) - drives the context bar
+let turnSpent = 0;             // tokens generated for this response (output) - the intuitive per-query cost
+let ctxTokens = 0;              // latest context size - feeds the compact-on-reopen prefill
+
+function fmtTok(n) { return n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n); }
+// the usage panel's context-window row is gone (autocompact makes it non-actionable);
+// ctxTokens is still tracked because compact-on-reopen keys off it.
+function updateCtx() {}
+// per-response spend, coloured by how close it is to ~3k
+function tokenColor(n) { return n >= 3000 ? "var(--err)" : n >= 1800 ? "#d9b34a" : "var(--ok)"; }
+function tokenLine(n) {
+  const d = el("res", fmtTok(n) + " tokens");
+  d.style.color = tokenColor(n);
+  const c = $("chat"); const stick = nearBottom(c);
+  c.appendChild(d);
+  if (stick) c.scrollTop = c.scrollHeight;
+}
+
+const $ = id => document.getElementById(id);
+
+// pane mode: this page is ONE cell of the grid view (see the grid section below).
+// Declared up top because early-running blocks (the visualViewport fit) branch on it.
+const PANE = new URLSearchParams(location.search).get("pane") === "1";
+if (PANE) document.body.classList.add("pane");
+
+function age(ts) {
+  const s = Math.max(1, Date.now()/1000 - ts);
+  if (s < 3600) return Math.floor(s/60) + "m";
+  if (s < 86400) return Math.floor(s/3600) + "h";
+  return Math.floor(s/86400) + "d";
+}
+// A running turn whose jsonl was last written within 12h is genuinely working (green dot);
+// older than that it's stale/wedged (yellow) - decided at row build from the session mtime.
+const FRESH_S = 12 * 3600;
+function isFresh(s) { return (Date.now() / 1000 - (s.mtime || 0)) < FRESH_S; }
+// The green "waiting for you" dot clears once you've OPENED the chat, and re-arms on the next
+// activity (a turn that bumps mtime past when you last looked). `seen[sid]` = the timestamp of
+// that last look, kept per-device (whether *I* have looked is personal, like the sweep badge).
+let seen = {};
+try { seen = JSON.parse(localStorage.getItem("hubSeen") || "{}") || {}; } catch (e) {}
+function cacheSeen() { try { localStorage.setItem("hubSeen", JSON.stringify(seen)); } catch (e) {} }
+function greenFresh(s) { return isFresh(s) && (s.mtime || 0) > (seen[s.id] || 0); }
+function markChatSeen(s) {
+  if (!s || !s.id) return;
+  // record max(now, mtime) so a just-opened chat clears regardless of client/server clock skew;
+  // a later write (bigger mtime) still exceeds this and re-greens.
+  seen[s.id] = Math.max(Date.now() / 1000, s.mtime || 0);
+  cacheSeen();
+  for (const row of document.querySelectorAll("#list .sess"))
+    if (row.dataset.sid === s.id) row.classList.remove("fresh");
+}
+function apiBase(node) { return node === hubNode ? "" : "/node/" + node; }
+// a fixed, distinct categorical palette (dark-friendly), assigned in rotation so
+// neighbouring tags never collide; per-tag choice persists in localStorage and can be
+// overridden by clicking a CT name in the library bar.
+const PALETTE = ["#5aa9e6", "#e6894a", "#6fcf79", "#e0687f", "#b98ae6",
+                 "#e6c84a", "#4fc7c7", "#e879c0", "#9fd356", "#b58868"];
+let colorMap = {};
+try { colorMap = JSON.parse(localStorage.getItem("hubColors") || "{}"); } catch (e) {}
+function saveColors() { try { localStorage.setItem("hubColors", JSON.stringify(colorMap)); } catch (e) {} }
+function colorFor(key) {
+  key = key || "?";
+  if (!colorMap[key]) { colorMap[key] = PALETTE[Object.keys(colorMap).length % PALETTE.length]; saveColors(); }
+  return colorMap[key];
+}
+function setColor(key, hex) { colorMap[key] = hex; saveColors(); refresh(); refreshCTs(); }
+// palette hexes are tuned bright for the dark sidebar; on the light theme they wash out
+// against the cream rows, so darken the RENDERED tag colour (dark mode keeps the raw hex).
+function tagCol(hex) {
+  if (!lightMode) return hex;
+  const n = parseInt(hex.slice(1), 16);
+  const r = Math.round(((n >> 16) & 255) * 0.55), g = Math.round(((n >> 8) & 255) * 0.55), b = Math.round((n & 255) * 0.55);
+  return "#" + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+}
+
+// What service + model is running this chat, spelled out so a glance tells Claude from
+// Antigravity (and, when we know it, the model inside each). `engine` comes from the
+// session list ("gemini" = Antigravity, anything else = Claude); the model is only known
+// when the client set it (new-chat target / model dropdown) - the daemon does not yet
+// report the model a past session actually ran on, so we fall back to the engine name.
+const MODEL_NAMES = { "claude-opus-4-8": "Opus", "claude-sonnet-5": "Sonnet",
+  "claude-fable-5": "Fable", "claude-haiku-4-5-20251001": "Haiku" };
+function modelLabel(m, eng) {
+  if (!m) return "";
+  if (MODEL_NAMES[m]) return MODEL_NAMES[m];
+  // codex model ids (gpt-5.6-terra) carry their meaning in the suffix - don't chop it off
+  if (eng === "codex") return m.replace(/^gpt-/, "GPT-");
+  return m.replace(/^claude-/, "").replace(/-\d.*$/, "").replace(/\b\w/g, c => c.toUpperCase());
+}
+function engineMeta(s) {
+  const eng = s && s.engine;
+  let name = "Claude", glyph = "✳", color = "#d97757";   // claude sunburst / clay
+  if (eng === "gemini") { name = "Antigravity"; glyph = "✦"; color = "#4a86e8"; }   // google blue
+  else if (eng === "codex") { name = "Codex"; glyph = "◉"; color = "#10a37f"; }  // openai teal
+  else if (eng === "lmstudio") { name = "LM Studio"; glyph = "◆"; color = "#2ea043"; }  // local green
+  const model = modelLabel(s && s.model, eng);
+  return { name, glyph, color, model, label: model ? name + " · " + model : name };
+}
+
+// The category a session belongs to: `local` groups the on-box LLM side-car (LM Studio);
+// `claude` covers Claude + the hidden-tab Antigravity/gemini sessions; `codex` alone.
+function sessionCat(s) {
+  const eng = (s && s.engine) || "claude";
+  if (eng === "lmstudio") return "local";
+  if (eng === "codex") return "codex";
+  return "claude";
+}
+// One rule for every engine-tab filter (sidebar, grid autofill, pane visibility). Exactly
+// one tab is active: "all" shows everything; everything else is an engine-category match.
+function engMatches(s, filter) {
+  if (!filter || filter === "all") return true;
+  return sessionCat(s) === filter;
+}
+
+function closeSwatch() { const p = $("swatch"); if (p) p.remove(); }
+function openSwatch(e, key) {
+  e.stopPropagation();
+  closeSwatch();
+  const pop = document.createElement("div");
+  pop.id = "swatch";
+  for (const hex of PALETTE) {
+    const sw = document.createElement("button");
+    sw.style.background = hex;
+    if (colorMap[key] === hex) sw.className = "sel";
+    sw.onclick = ev => { ev.stopPropagation(); setColor(key, hex); closeSwatch(); };
+    pop.appendChild(sw);
+  }
+  document.body.appendChild(pop);
+  const r = e.target.getBoundingClientRect();
+  pop.style.left = Math.max(6, Math.min(r.left, innerWidth - 270)) + "px";
+  pop.style.top = (r.bottom + 4) + "px";
+}
+document.addEventListener("click", closeSwatch);
+function wsUrl(s) {
+  const p = (location.protocol === "https:" ? "wss://" : "ws://") + location.host;
+  return p + (s.node === hubNode ? "" : "/node/" + s.node) + "/ws/" + s.id;
+}
+
+async function refresh() {
+  try {
+    const n = await (await fetch("/api/node")).json();
+    hubNode = n.node;
+    // gateway node badge defaults to the logo amber (still overridable via the swatch)
+    if (!(hubNode in colorMap)) { colorMap[hubNode] = "#ffc04b"; saveColors(); }
+    defNode = n.default || null;
+    nodeLabels[n.node] = n.label || n.node;
+    if (n.codex) codexNodes.add(n.node); else codexNodes.delete(n.node);
+    // classify each peer once: the CT library (cts:true) vs a plain node
+    for (const p of (n.peers || [])) {
+      if (!(p in peerInfo)) {
+        try { peerInfo[p] = await (await fetch(`/node/${p}/api/node`)).json(); } catch (e) {}
+      }
+      if (peerInfo[p]) nodeLabels[p] = peerInfo[p].label || p;
+      if (peerInfo[p] && peerInfo[p].codex) codexNodes.add(p);
+    }
+    libNode = (n.peers || []).find(p => peerInfo[p] && peerInfo[p].cts) || (n.peers && n.peers[0]) || null;
+    $("nodename").textContent = [...new Set([n.node, ...(n.peers || [])].map(dispNode))].join(" + ");
+    const fetched = await (await fetch("/api/sessions")).json();
+    // once the server list no longer carries an id we deleted, stop suppressing it (bounded set)
+    deletedIds = new Set([...deletedIds].filter(id => fetched.some(s => s.id === id)));
+    sessions = fetched.filter(s => !deletedIds.has(s.id));
+    // prune the seen map so it can't grow unbounded (drop entries for gone sessions)
+    { const live = new Set(fetched.map(s => s.id)); let ch = false;
+      for (const id of Object.keys(seen)) if (!live.has(id)) { delete seen[id]; ch = true; }
+      if (ch) cacheSeen(); }
+    // the codex tab only earns its slot where a codex binary (or session) actually exists
+    $("tab-codex").style.display =
+      (codexNodes.size || sessions.some(s => s.engine === "codex")) ? "" : "none";
+    renderList();
+    gridTitles();
+  } catch (e) { console.error(e); }
+}
+
+// Build the sidebar rows from the in-memory `sessions` array (no refetch). Pinned
+// sessions float to the top; sort is stable so each group keeps the server's mtime order.
+function setEngineFilter(f) {
+  engineFilter = f;   // exclusive: one active tab at a time
+  try { localStorage.setItem("hubEngineFilter", engineFilter); } catch (e) {}
+  updateEngineTabs();
+  renderList();
+  if (gridOn) {
+    const visibleCount = gridSess.filter(s => engMatches(s, engineFilter)).length;
+    if (visibleCount === 0) gridAutofill(); else applyGridPos();
+  }
+}
+function updateEngineTabs() {
+  if (PANE) return;
+  document.querySelectorAll(".tabbtn").forEach(b => {
+    b.classList.toggle("active", engineFilter === b.id.replace("tab-", ""));
+  });
+}
+function buildRow(s, idx) {
+  // No per-row cwd: every chat is /root or /work and the ct/node badge already says which
+  // world it lives in; the full path still shows in the chat top bar.
+  const inStash = stashed.has(s.id);
+  const d = document.createElement("div");
+  d.dataset.sid = s.id;
+  d.draggable = IS_DESKTOP && !PANE;   // desktop drag-reorder; touch keeps swipe/long-press
+  d.className = "sess" + (cur && cur.id === s.id ? " active" : "")
+    + (runningIds.has(s.id) ? " run" : "") + (greenFresh(s) ? " fresh" : "")
+    + (pinned.has(s.id) ? " pinned" : "") + (inStash ? " stashed" : "");
+  d.innerHTML = `<div class="swbg"><span class="swd">Delete</span><span class="swa">Archive</span></div>`
+    + `<div class="swrow"><span class="rdot"></span>`
+    + `<span class="body"><span class="t"></span>`
+    + `<span class="m"><span class="eng"></span><span class="badge"></span><span>${age(s.mtime)}</span></span></span>`
+    + (inStash ? `<button class="pinbtn" title="unstash: back to the main list">📤</button>`
+               : `<button class="pinbtn" title="pin to top">📌</button>`) + `</div>`;
+  const tEl = d.querySelector(".t");
+  tEl.textContent = dispTitle(s);
+  if (cur && cur.id === s.id) tEl.title = "click to rename";
+  const em = engineMeta(s);
+  const eng = d.querySelector(".eng");
+  eng.textContent = em.glyph + (em.model ? " " + em.model : "");   // logo + model; full name in tooltip
+  eng.style.color = em.color;
+  eng.title = em.label;
+  d.querySelector(".pinbtn").onclick = e => { e.stopPropagation(); inStash ? toggleStash(s.id) : togglePin(s.id); };
+  const bd = d.querySelector(".badge");
+  bd.textContent = s.ct ? "ct:" + s.ct : dispNode(s.node);
+  const c = tagCol(colorFor(s.ct || s.node));
+  bd.style.color = c;
+  bd.style.borderColor = c + "66";
+  bd.style.background = c + "1e";
+  d.onclick = e => onRowClick(e, s, idx);
+  return d;
+}
+function renderList() {
+  // Don't rebuild the list out from under an in-progress inline rename - a background
+  // refresh()/sync* would remove the focused input (and on Firefox not even fire blur, losing
+  // what was typed). finish() removes the input before its own renderList, so it's not blocked.
+  if (document.querySelector("#list .trename")) return;
+  const all = sessions.filter(s => engMatches(s, engineFilter));
+  let listSess = all.filter(s => !stashed.has(s.id));
+  const stashSess = all.filter(s => stashed.has(s.id));   // server mtime order (recency)
+  // pins float to top (unchanged); within that, recently-active (fresh) chats come next,
+  // most-recent first, so the chat you just used floats up regardless of any manual
+  // arrangement below (a single desktop drag snapshots the WHOLE list into `order`, which
+  // otherwise freezes recency for every chat). Idle chats keep the manual drag sequence,
+  // then any unarranged ones in the server's mtime order.
+  const rank = new Map(order.map((id, i) => [id, i]));
+  listSess.sort((a, b) => {
+    const p = (pinned.has(b.id) ? 1 : 0) - (pinned.has(a.id) ? 1 : 0);
+    if (p) return p;
+    const fa = isFresh(a) ? 1 : 0, fb = isFresh(b) ? 1 : 0;
+    if (fa !== fb) return fb - fa;            // fresh (recently active) floats above idle
+    if (fa && fb) return (b.mtime || 0) - (a.mtime || 0);   // among fresh: newest first
+    const ra = rank.has(a.id) ? rank.get(a.id) : -1;
+    const rb = rank.has(b.id) ? rank.get(b.id) : -1;
+    if (ra === -1 && rb === -1) return 0;   // both unarranged -> keep server mtime order
+    if (ra === -1) return -1;               // an unarranged (e.g. new) chat floats above the arranged block
+    if (rb === -1) return 1;
+    return ra - rb;                          // both arranged -> the manual sequence
+  });
+  // idx = visible-row index, so shift-range follows what the user sees; the open stash
+  // group continues the numbering after the main rows.
+  rendered = stashOpen ? [...listSess, ...stashSess] : listSess;
+  $("list").innerHTML = "";
+  listSess.forEach((s, idx) => $("list").appendChild(buildRow(s, idx)));
+  // The stash drawer: stashed rows sit ABOVE the sticky footer header in the DOM, so
+  // expanding reads as the drawer opening upward from the bottom edge of the list.
+  if (stashSess.length) {
+    if (stashOpen) stashSess.forEach((s, i) => $("list").appendChild(buildRow(s, listSess.length + i)));
+    const h = document.createElement("div");
+    h.id = "stashhead";
+    if (stashOpen) h.className = "open";
+    h.innerHTML = `<span class="chev">▶</span><span>stashed</span><span>${stashSess.length}</span>`;
+    h.title = "hibernated chats: out of the main list, open any time";
+    h.onclick = () => { stashOpen = !stashOpen; localStorage.setItem("hubStashOpen", stashOpen ? "1" : "0"); renderList(); };
+    $("list").appendChild(h);
+  }
+  if (gridOn) gridPaint();   // rebuilt rows lost their grid highlights
+}
+
+// pin toggle: update optimistically + re-sort in place (no /api/sessions refetch = no stall),
+// then persist to the gateway origin so other devices pick it up on their next refresh.
+function togglePin(id) {
+  if (!id) return;
+  const method = pinned.has(id) ? "DELETE" : "PUT";
+  if (pinned.has(id)) pinned.delete(id); else pinned.add(id);
+  cachePins();
+  renderList();
+  fetch("/api/pins/" + encodeURIComponent(id), { method }).catch(() => {});
+}
+
+// stash toggle: same optimistic pattern as pins. Stashing also unpins - a chat can't be
+// floated to the top and folded away at the same time.
+function toggleStash(id) {
+  if (!id) return;
+  const method = stashed.has(id) ? "DELETE" : "PUT";
+  if (stashed.has(id)) stashed.delete(id);
+  else {
+    stashed.add(id);
+    if (pinned.delete(id)) { cachePins(); fetch("/api/pins/" + encodeURIComponent(id), { method: "DELETE" }).catch(() => {}); }
+  }
+  cacheStash();
+  renderList();
+  fetch("/api/stash/" + encodeURIComponent(id), { method }).catch(() => {});
+}
+
+// ---- live-turn dots: which sessions are thinking right now ----
+// Polled on its own (fast) cadence, decoupled from the SWR-cached session list, so an
+// active turn lights up within a few seconds without paying the list rebuild cost.
+let runningIds = new Set();
+let runStrikes = 0;   // consecutive polls where the open chat looked running but the server said idle
+async function refreshRunning() {
+  try {
+    const d = await (await fetch("/api/running")).json();
+    runningIds = new Set(d.ids || []);
+    for (const row of document.querySelectorAll("#list .sess"))
+      row.classList.toggle("run", runningIds.has(row.dataset.sid));
+    // Self-heal a stale stop-square: phone sleep can leave the ws HALF-OPEN (no close event,
+    // so no auto-reconnect and the turn's hub_done died with the zombie socket) - the
+    // composer then shows ■ forever on a finished turn and sends get queued ("I had to
+    // manually pause, it was clearly done"). This poll is fresh HTTP truth: if the open
+    // claude/gemini chat claims running but the server says idle 3 polls straight (~10s -
+    // a just-sent turn registers its PID within ~1s, so real turns never trip this), clear
+    // the square and reconnect the tail on a fresh socket. Local/codex chats manage
+    // their own spinners and never appear in /api/running - excluded.
+    if (running && cur && !cur.fresh && !termModeFor(cur)
+        && (!cur.engine || cur.engine === "claude" || cur.engine === "gemini")
+        && !runningIds.has(cur.id)) {
+      if (++runStrikes >= 3) { runStrikes = 0; setRunning(false); connect(cur); }
+    } else runStrikes = 0;
+  } catch (e) {}
+  // piggyback the soele-wait chip refresh on this same cadence - no separate poll timer
+  if (cur && !cur.fresh) refreshWaits(cur);
+}
+
+// Multi-select was removed 2026-07-25 (drag-drop and swipe cover it; bulk
+// cleanup now goes through the review modal). Rows just open.
+let rendered = [];          // sessions in visible order (pinned first) - what the rows map to
+let swipeConsumedAt = 0;    // a swipe/long-press just handled this row - suppress the tap that opens it
+function onRowClick(e, s, idx) {
+  if (Date.now() - swipeConsumedAt < 400) return;   // gesture already acted; don't also open
+  // Rename gesture: a click on the TITLE of the already-open row turns it into an input.
+  // A click on any other row (or elsewhere on the open row) just opens it, as before.
+  if (cur && cur.id === s.id && e.target.closest(".t")) { startRename(s, e.target.closest(".t")); return; }
+  open(s);
+}
+
+// Inline rename: swap the row's title span for an input. Enter / blur commits, Esc cancels.
+// A blank commit clears the override (back to the derived title). Persisted to the origin
+// store so every device agrees, same as pins.
+// Reliability: we do NOT gate on a boolean (a background renderList that removed the focused
+// input without firing blur - which Firefox does on programmatic removal - used to strand that
+// flag `true` and block every future rename until a page reload). Instead "already editing" is
+// read from the DOM, and renderList() defers while an input is live (see its guard).
+function startRename(s, tEl) {
+  if (document.querySelector("#list .trename")) return;   // one at a time, derived from the DOM
+  const inp = document.createElement("input");
+  inp.className = "trename";
+  inp.value = dispTitle(s);
+  tEl.replaceWith(inp);
+  inp.focus(); inp.select();
+  let done = false;
+  const finish = (save) => {
+    if (done) return; done = true;
+    if (save) {
+      const v = inp.value.trim();
+      const cur2 = titles[s.id] || "";
+      if (v === (s.title || "")) { delete titles[s.id]; }   // matches derived title -> no override
+      else if (v) { titles[s.id] = v; }
+      else { delete titles[s.id]; }                          // blank -> clear override
+      if ((titles[s.id] || "") !== cur2) {
+        cacheTitles();
+        const has = !!titles[s.id];
+        fetch("/api/titles/" + encodeURIComponent(s.id),
+          has ? { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: titles[s.id] }) }
+              : { method: "DELETE" }).catch(() => {});
+      }
+    }
+    inp.remove();          // drop the input FIRST so renderList's edit-guard lets the repaint through
+    renderList();
+    if (gridOn) gridTitles();
+  };
+  inp.onclick = e => e.stopPropagation();
+  inp.onkeydown = e => {
+    e.stopPropagation();
+    if (e.key === "Enter") { e.preventDefault(); finish(true); }
+    else if (e.key === "Escape") { e.preventDefault(); finish(false); }
+  };
+  inp.onblur = () => finish(true);
+}
+
+// single-row archive/delete (used by the swipe gesture + review modal). Delete asks first;
+// archive doesn't. Drop the row optimistically, then fire the routed call.
+function rowAction(id, kind) {
+  const s = sessions.find(x => x.id === id);
+  if (!s) return;
+  if (kind === "delete" && !confirm("delete this chat? this cannot be undone")) return;
+  dropSession(id);
+  if (cur && cur.id === id) freshBlank();   // closing the open chat lands on a usable fresh blank
+  const url = apiBase(s.node) + `/api/sessions/${id}` + (kind === "archive" ? "/archive" : "");
+  fetch(url, { method: kind === "archive" ? "POST" : "DELETE" }).catch(() => {});
+}
+
+// Touch gestures on chat rows (delegated on #list so re-renders don't need re-binding):
+//   swipe RIGHT -> delete (modal confirm)   swipe LEFT -> archive (no confirm)
+// A tap still opens; the swipeConsumedAt guard stops a swipe from also opening the chat.
+// Multi-select is the header `select` button (touch) or shift/ctrl-click (desktop). The old
+// click-and-hold-to-select gesture (touch long-press + desktop mouse-hold) was removed once
+// drag-reorder landed - a hold now reads as the start of a drag, not a select.
+function initRowGestures() {
+  const list = $("list");
+  let row = null, swrow = null, sid = null;
+  let startX = 0, startY = 0, dx = 0, dir = 0, w = 0;
+
+  const reset = () => {
+    if (row) { row.classList.remove("dragging", "sw-left", "sw-right"); if (swrow) swrow.style.transform = ""; }
+    row = swrow = sid = null; dx = 0; dir = 0;
+  };
+
+  list.addEventListener("touchstart", e => {
+    if (e.touches.length !== 1) return;
+    const r = e.target.closest(".sess"); if (!r) return;
+    row = r; swrow = r.querySelector(".swrow"); sid = r.dataset.sid;
+    startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+    dx = 0; dir = 0; w = r.offsetWidth || 300;
+  }, { passive: true });
+
+  list.addEventListener("touchmove", e => {
+    if (!row || e.touches.length !== 1) return;
+    const mx = e.touches[0].clientX - startX, my = e.touches[0].clientY - startY;
+    if (dir === 0) {
+      if (Math.abs(mx) < 10 && Math.abs(my) < 10) return;      // within slop, undecided
+      dir = Math.abs(mx) > Math.abs(my) ? 1 : -1;              // lock axis on first real move
+      if (dir === 1) row.classList.add("dragging");
+    }
+    if (dir !== 1) return;                                     // vertical -> let the list scroll
+    e.preventDefault();
+    dx = Math.max(-w * 0.9, Math.min(w * 0.9, mx));
+    swrow.style.transform = `translateX(${dx}px)`;
+    row.classList.toggle("sw-right", dx > 0);
+    row.classList.toggle("sw-left", dx < 0);
+  }, { passive: false });
+
+  const end = () => {
+    if (!row) return;
+    if (dir === 1) {                                           // horizontal drag: archive/delete, never open
+      const past = Math.abs(dx) > Math.max(70, w * 0.33);
+      const kind = dx > 0 ? "delete" : "archive", id = sid;
+      swipeConsumedAt = Date.now();
+      reset();
+      if (past) rowAction(id, kind);                           // else it just snaps back
+      return;
+    }
+    reset();
+  };
+  list.addEventListener("touchend", end);
+  list.addEventListener("touchcancel", reset);
+}
+
+// Plan-usage panel in the sidebar. /api/usage has named Claude + Codex sections;
+// only Claude gets the browser's current Claude-context row.
+let usageProps = null;
+const CTX_MAX = 200000;  // opus context window - drives the context bar's fill
+function usageSections(props) {
+  if (!props) return [];
+  const named = ("claude" in props) || ("codex" in props);
+  const sections = named ? [
+    { id: "claude", name: "Claude", props: props.claude },
+    { id: "codex", name: "Codex", props: props.codex },
+  ] : [{ id: "claude", name: "Claude", props }];  // old daemon during a rolling deploy
+  return sections.filter(s => s.props && (s.props.limits || []).length);
+}
+function renderUsagePanel() {
+  const u = $("usage");
+  const sections = usageSections(usageProps);
+  if (!sections.length) { u.style.display = "none"; return; }
+  u.style.display = "block";
+  u.innerHTML = "";
+  // one toggle strip, always shown: ▾ collapsed (opens downward), ▴ open (collapses).
+  // it IS the header now, so the old "Plan usage limits · Max · as of… → ×" row is dropped.
+  const strip = document.createElement("button");
+  strip.type = "button"; strip.className = "hu-show";
+  strip.textContent = "plan usage " + (usageHidden ? "▾" : "▴");
+  strip.onclick = () => setUsageHidden(!usageHidden);
+  u.appendChild(strip);
+  if (usageHidden) return;
+  for (const section of sections) {
+    const group = document.createElement("section"); group.className = "usage-section";
+    const title = document.createElement("div"); title.className = "usage-service";
+    // Claude's plan label is just HUB_PLAN (a static guess, not detected) - show plain
+    // "Claude". Codex's plan IS detected from its rollout data, so keep it.
+    title.textContent = section.id === "claude" ? section.name
+      : section.name + (section.props.plan ? " · " + section.props.plan : "");
+    group.appendChild(title);
+    const wrap = document.createElement("div");
+    wrap.innerHTML = HubUsage.renderPopover(section.props, { expand: false });
+    const hdr = wrap.querySelector(".hu-hdr");
+    if (hdr) hdr.remove();
+    group.appendChild(wrap); u.appendChild(group);
+  }
+}
+function setUsageHidden(h) {
+  usageHidden = h;
+  try { localStorage.setItem("hubUsageHidden", h ? "1" : "0"); } catch (e) {}
+  renderUsagePanel();
+}
+async function refreshUsage() {
+  try {
+    const d = await (await fetch("/api/usage")).json();
+    usageProps = usageSections(d).length ? d : null;
+  } catch (e) { usageProps = null; }
+  renderUsagePanel();
+}
+
+async function refreshCTs() {
+  try {
+    cts = await (await fetch("/api/cts")).json();
+    renderCTbar();
+    if ($("ctbox").style.display === "block") renderCTgrid();
+  } catch (e) { console.error(e); }
+}
+// Sidebar strip only: a one-line summary that opens the workers popout. The old
+// inline chip flow ate the sidebar with too many CTs - the grid lives in #ctbox now.
+function renderCTbar() {
+  const bar = $("ctbar");
+  const workers = cts.filter(c => !c.golden);   // golden CT is the template - never shown
+  if (!workers.length) { bar.style.display = "none"; return; }
+  bar.style.display = "block";
+  bar.innerHTML = "";
+  const running = workers.filter(c => c.status === "running").length;
+  const strip = document.createElement("button");
+  strip.type = "button"; strip.className = "lib-show";
+  strip.onclick = openCTs;
+  strip.appendChild(document.createTextNode("library · "));
+  if (running) {
+    const r = document.createElement("span"); r.className = "run";
+    r.textContent = running + " running"; strip.appendChild(r);
+    strip.appendChild(document.createTextNode(" · " + workers.length + " total ▸"));
+  } else {
+    strip.appendChild(document.createTextNode(workers.length + " workers ▸"));
+  }
+  bar.appendChild(strip);
+}
+function openCTs() {
+  closeNav();
+  $("ctbox").style.display = "block";
+  placeCTBox();
+  renderCTgrid();
+  refreshCTs();          // pull fresh statuses; re-renders the grid when it lands
+}
+function closeCTs() { $("ctbox").style.display = "none"; }
+// Running first (alphabetical), then stopped (alphabetical) - two labelled sections.
+function renderCTgrid() {
+  const grid = $("ctgrid");
+  const workers = cts.filter(c => !c.golden);
+  const byName = (a, b) => a.name.localeCompare(b.name);
+  const up = workers.filter(c => c.status === "running").sort(byName);
+  const off = workers.filter(c => c.status !== "running").sort(byName);
+  grid.innerHTML = "";
+  const section = (title, list) => {
+    if (!list.length) return;
+    const h = document.createElement("div"); h.className = "cthdr";
+    h.textContent = title + " · " + list.length; grid.appendChild(h);
+    for (const c of list) grid.appendChild(ctCard(c));
+  };
+  section("running", up);
+  section("stopped", off);
+  if (!workers.length) grid.innerHTML = '<div class="amsg">no workers</div>';
+}
+function ctCard(c) {
+  const up = c.status === "running";
+  const col = tagCol(colorFor(c.name));
+  const card = document.createElement("div");
+  card.className = "ctcard" + (up ? " up" : "");
+  card.style.borderColor = col + "55";
+  const dot = document.createElement("span"); dot.className = "dot";
+  const nm = document.createElement("span");
+  nm.className = "ctname"; nm.textContent = c.name; nm.style.color = col;
+  nm.title = "click to set colour";
+  nm.onclick = e => openSwatch(e, c.name);
+  const b = document.createElement("button");
+  b.textContent = up ? "■" : "▶";
+  b.title = up ? "stop CT" : "start CT";
+  b.onclick = () => ctAction(c, up ? "stop" : "start");
+  card.append(dot, nm, b);
+  return card;
+}
+
+async function ctAction(c, act) {
+  if (act === "stop" && !confirm(`stop CT ${c.name}? (state survives, 'start' resumes)`)) return;
+  await fetch(apiBase(libNode || hubNode) + `/api/cts/${c.ctid}/${act}`, { method: "POST" });
+  await refreshCTs();
+  await refresh();
+}
+
+async function newWorker() {
+  const name = prompt("new worker name (lowercase, alnum/dash) - clones golden:");
+  if (!name) return;
+  const r = await (await fetch(apiBase(libNode || hubNode) + `/api/cts/new`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) })).json();
+  alert(r.ok ? `worker '${name}' up as CT ${r.ctid}` : "failed: " + (r.detail || r.error));
+  await refreshCTs();
+}
+
+// ---- new chat modal ----
+function renderModalTargets() {
+  const t = $("targets");
+  if (!t) return;
+  const checkedRadio = t.querySelector('input[name="tgt"]:checked');
+  const dt = defaultTarget();
+  const checkedVal = checkedRadio ? checkedRadio.value : (dt === hubNode ? "gateway" : "peer:" + dt);
+  
+  const cwdinVal = $("cwdin") ? $("cwdin").value : "/root";
+  const peerVals = {};
+  for (const p of Object.keys(peerInfo)) {
+    const el = $(`cwdin-${p}`);
+    if (el) peerVals[p] = el.value;
+  }
+
+  t.innerHTML = "";
+  const cwds = [...new Set(sessions.filter(s => s.node === hubNode).map(s => s.cwd))].slice(0, 8);
+  t.insertAdjacentHTML("beforeend",
+    `<label><input type="radio" name="tgt" value="gateway"> ${dispNode(hubNode)} · directory
+       <input type="text" id="cwdin" value="/root" list="cwds">
+       <datalist id="cwds">${cwds.map(c => `<option value="${c}">`).join("")}</datalist></label>`);
+  const q = s => String(s).replace(/"/g, "&quot;");
+  for (const p of Object.keys(peerInfo)) {
+    if (p === hubNode || (peerInfo[p] && peerInfo[p].cts)) continue;
+    const pcwds = [...new Set(sessions.filter(s => s.node === p).map(s => s.cwd))].slice(0, 8);
+    t.insertAdjacentHTML("beforeend",
+      `<label><input type="radio" name="tgt" value="peer:${q(p)}"> ${q(dispNode(p))} · directory
+         <input type="text" id="cwdin-${q(p)}" value="${q(p === dt ? "/root" : (pcwds[0] || ""))}" placeholder="(home)" list="cwds-${q(p)}">
+         <datalist id="cwds-${q(p)}">${pcwds.map(c => `<option value="${q(c)}">`).join("")}</datalist></label>`);
+  }
+  for (const c of cts.filter(c => c.status === "running" && !c.golden)) {
+    t.insertAdjacentHTML("beforeend",
+      `<label><input type="radio" name="tgt" value="ct:${c.ctid}:${c.name}"> CT ${c.name} · /work</label>`);
+  }
+
+  if ($("cwdin")) $("cwdin").value = cwdinVal;
+  for (const p of Object.keys(peerInfo)) {
+    const el = $(`cwdin-${p}`);
+    if (el && peerVals[p] !== undefined) el.value = peerVals[p];
+  }
+  const radioToSelect = t.querySelector(`input[name="tgt"][value="${checkedVal}"]`);
+  if (radioToSelect) radioToSelect.checked = true;
+  else {
+    const defaultRadio = t.querySelector(`input[name="tgt"][value="${dt === hubNode ? "gateway" : "peer:" + dt}"]`)
+                      || t.querySelector('input[name="tgt"]');
+    if (defaultRadio) defaultRadio.checked = true;
+  }
+}
+
+function openModal() {
+  closeNav();
+  renderModalTargets();
+  
+  let activeEngineVal = "default";
+  if (engineFilter === "claude") activeEngineVal = "claude";   // pre-pick the tab's engine
+  if (engineFilter === "codex" && codexNodes.size) activeEngineVal = "codex";
+  $("engine-codex").style.display = codexNodes.size ? "inline-flex" : "none";
+  document.querySelectorAll('input[name="engine"]').forEach(r => {
+    r.checked = r.value === activeEngineVal;
+  });
+  $("modal").style.display = "block";
+  placeModal();
+  refreshCTs().then(renderModalTargets).catch(() => {});
+}
+function closeModal() { $("modal").style.display = "none"; }
+// position:fixed anchors to the LAYOUT viewport, so on a pinch-zoomed phone the box could
+// sit entirely outside the visible area - the user tapped "+ new" and saw only the dim
+// overlay. Place the box inside the VISUAL viewport instead; at scale 1 with no pan this
+// degrades to the same top-centered layout as before.
+function placeModal() {
+  const v = window.visualViewport, m = $("modal");
+  if (!v || m.style.display !== "block") return;
+  const b = m.querySelector(".box");
+  const w = Math.min(420, v.width - 24);
+  b.style.maxWidth = w + "px";
+  b.style.maxHeight = Math.round(v.height * 0.8) + "px";
+  b.style.margin = Math.round(v.offsetTop + v.height * 0.1) + "px 0 24px " +
+                   Math.round(v.offsetLeft + (v.width - w) / 2) + "px";
+}
+function createChat() {
+  const v = document.querySelector('input[name="tgt"]:checked').value;
+  const sid = "new-" + Math.random().toString(36).slice(2, 10);
+  let s;
+  if (v.startsWith("ct:")) {
+    const [, ctid, name] = v.split(":");
+    s = { id: sid, node: libNode || hubNode, ctid: parseInt(ctid), ct: name, cwd: "/work", fresh: true };
+  } else if (v.startsWith("peer:")) {
+    const p = v.slice(5);
+    s = { id: sid, node: p, cwd: ($("cwdin-" + p) ? $("cwdin-" + p).value : "").trim(), fresh: true };
+  } else {
+    s = { id: sid, node: hubNode, cwd: $("cwdin").value.trim() || "/root", fresh: true };
+  }
+  const engineEl = document.querySelector('input[name="engine"]:checked');
+  if (engineEl && engineEl.value !== "default") {
+    s.engine = engineEl.value;
+  }
+  // codex lives on the host only (no binary in the worker CTs / on the PC node), and picking
+  // an unsupported target would silently fall back to claude - say so instead.
+  if (s.engine === "codex" && (s.ctid || !codexNodes.has(s.node))) {
+    alert("codex runs on " + ([...codexNodes].join(", ") || "no node here") + " - pick that target");
+    return;
+  }
+  closeModal();
+  open(s);
+  line("dim", `new chat on ${s.ct ? "CT " + s.ct : dispNode(s.node)} in ${s.cwd || "(home)"} - first message starts the session`);
+}
+
+// The idle/no-chat state (first app load, or after closing/deleting the open chat) is a
+// ready-to-type fresh session on the default node in /root, not a dead "pick a chat" screen.
+// Forced to CHAT view (via s.blank, so open() skips the terminal gate) so it costs nothing
+// until the first message - no tmux/claude spawns, same as an idle blank used to. The mode
+// toggle still flips it to terminal (toggleMode clears s.blank). Skipped in grid/pane mode,
+// which own their own empty state.
+function freshBlank() {
+  if (gridOn || PANE) return;
+  const sid = "new-" + Math.random().toString(36).slice(2, 10);
+  const n = defaultTarget();
+  open({ id: sid, node: n, cwd: "/root", fresh: true, blank: true });
+  line("dim", `new chat on ${dispNode(n)} in /root - just start typing`);
+}
+
+// ---- chat ----
+const PAST_CLS = { user: "me", assistant: "as", tool: "tool", tool_err: "err" };
+
+// Every (re)connect reloads the transcript from disk (the source of truth) and then
+// tails from that byte offset. This makes the view restart-proof: a turn that spanned
+// a daemon restart is fully on disk, so reconnecting repaints history + resumes the
+// live tail with no gap and no duplicates.
+async function connect(s) {
+  if (sock) { sock.onclose = null; sock.close(); }
+  pendingEcho = [];  // a (re)connect repaints the log from disk (truth), so drop optimistic echoes
+  if (!s.fresh) {
+    try {
+      const r = await fetch(apiBase(s.node) + `/api/sessions/${s.id}/transcript`).then(r => r.json());
+      if (cur !== s) return;  // user clicked away mid-load
+      $("chat").innerHTML = "";
+      for (const e of (r.events || [])) {
+        if (e.role === "tokens") tokenLine(e.n);
+        // timestamp shown only on real chat messages (user/assistant), not tool/status lines
+        else line(PAST_CLS[e.role] || "dim", e.text, (e.role === "user" || e.role === "assistant") ? e.ts : null);
+      }
+      ctxTokens = r.ctx || 0; updateCtx();
+      maybeSuggestCompact(s);
+      if (s.engine === "codex")
+        line("dim", "Codex transcript — send here or switch to term for the full interactive view.");
+      s.offset = r.size || 0;
+    } catch (e) { s.offset = s.offset || 0; }
+  } else { s.offset = 0; }
+  sock = new WebSocket(wsUrl(s));
+  sock.onopen = () => { if (!s.fresh) sock.send(JSON.stringify({ type: "attach", from: s.offset, ctid: s.ctid })); };
+  sock.onmessage = m => render(JSON.parse(m.data));
+  sock.onclose = () => { if (cur === s) setTimeout(() => connect(s), 1200); };
+}
+
+function toggleNav() { document.body.classList.toggle("nav-open"); }
+function closeNav() { document.body.classList.remove("nav-open"); }
+
+// Mobile drawer: the top-bar controls (everything but the #ctx environment badge) live in an
+// always-visible horizontal strip just above the bottom bar; desktop keeps them in #top. Same
+// DOM nodes, reparented on the breakpoint, so every id/handler keeps working in either home.
+// The strip is a real flex row in #main (not an overlay), so #chat's scroll area sits above it
+// and messages never hide behind it. It rides the keyboard for free (bottom of the vv-sized
+// column). CSS `order` floats it just above whichever bar shows (composer OR terminal keybar).
+// drawer order, left to right: pause, model select, view toggle, hamburger. #spin is not
+// here - the pause button already signals a running turn, so the "running…" text is dropped
+// on mobile (hidden via CSS; it stays in #top on desktop).
+const MOVABLE_CTRLS = ["stop", "engine", "modeBtn", "menu"];
+const drawerMq = window.matchMedia("(max-width: 700px)");
+function layoutControls() {
+  const dest = drawerMq.matches ? $("drawer") : $("top");
+  MOVABLE_CTRLS.forEach(id => { const el = $(id); if (el) dest.appendChild(el); });
+}
+drawerMq.addEventListener("change", layoutControls);
+
+// highlight the open chat WITHOUT refetching the (slow) session list - clicking a chat
+// only needs to load its transcript (fast), not rebuild the whole sidebar.
+function setActive(id) {
+  for (const d of document.querySelectorAll("#list .sess"))
+    d.classList.toggle("active", d.dataset.sid === id);
+}
+
+function open(s) {
+  if (gridOn && !PANE) return gridAdd(s);   // grid mode: a click fills a pane instead
+  if (codexInputSession && codexInputSession !== s) closeCodexInput();
+  cur = s;
+  if (s.pin) s.model = s.pin;   // server-synced per-chat model pin beats the detected model
+  closeNav();
+  $("tcwd").textContent = s.cwd || "";
+  $("ctx").textContent = s.ct ? "ct:" + s.ct : dispNode(s.node);
+  updateEngineBadge();
+  // an unsent "/compact" (prefilled or typed) never follows you into another chat -
+  // a typed one is already draft-saved under its own session, so clearing the box is safe
+  if ($("input").value.trim() === "/compact") { $("input").value = ""; updateSendBtn(); }
+  loadDraft(s);   // an unsent draft for this chat survives an app kill / reload
+  // the local-model row has a chat view (a direct request to the local model) plus a terminal
+  // toggle for its full agentic CLI. Codex has its own persisted event log and a TUI-backed
+  // composer.
+  const termOnly = !!s.term_only;
+  $("modeBtn").style.display = termOnly ? "none" : "inline-flex";
+  updateModeBtn();
+  setActive(s.id);   // highlight instantly; no full list refetch (that was the ~3s stall)
+  markChatSeen(s);   // clicking a chat clears its green "waiting for you" dot
+
+  if ((termModeFor(s) && !s.blank) || termOnly || (s.fresh && s.engine === "codex")) return openTerm(s);
+  if (isLocalChat(s)) return openLocalChat(s);
+  openChat(s);
+}
+function openChat(s) {
+  showChatUI();
+  turnIn = 0; turnSpent = 0;
+  ctxTokens = 0; updateCtx();
+  queue = []; updateQueueBar();
+  if (!s.fresh) refreshQueue(s);   // pull the host-side queue for this chat (survives app close / chat switch)
+  waits = []; updateWaitBar();
+  if (!s.fresh) refreshWaits(s);   // pull pending soele-wait watches for this chat
+  clearAttach();
+  $("chat").innerHTML = "";
+  setRunning(false);
+  connect(s);
+  if (!drawerMq.matches) $("input").focus();   // mobile: don't pop the keyboard on open - wait for a tap
+}
+
+// Local chat view (the local-model row). No websocket and no disk tail: a turn is one
+// HTTP request (sendLocal), and the conversation is the small JSON log the daemon keeps.
+// Terminal mode is still a toggle away with its own tmux context.
+function isLocalChat(s) { return s && s.engine === "lmstudio"; }
+function openLocalChat(s) {
+  showChatUI();
+  turnIn = 0; turnSpent = 0;
+  ctxTokens = 0; updateCtx();
+  queue = []; updateQueueBar();
+  clearAttach();
+  if (sock) { sock.onclose = null; sock.close(); sock = null; }   // this view has no live socket
+  pendingEcho = [];
+  $("chat").innerHTML = "";
+  setRunning(false);
+  loadLocalTranscript(s);
+  if (!drawerMq.matches) $("input").focus();   // mobile: don't pop the keyboard on open - wait for a tap
+}
+async function loadLocalTranscript(s) {
+  try {
+    const r = await fetch(apiBase(s.node) + `/api/local/${encodeURIComponent(s.id)}/transcript`).then(r => r.json());
+    if (cur !== s) return;   // user clicked away mid-load
+    $("chat").innerHTML = "";
+    for (const e of (r.events || [])) line(PAST_CLS[e.role] || "dim", e.text);
+    line("dim", "Local model chat on " + dispNode(s.node) + ". Switch to terminal for the full CLI.");
+  } catch (e) {
+    if (cur === s) line("err", "could not load the local chat");
+  }
+}
+function sendLocal(s, text) {
+  setRunning(true);   // shows the spinner while the local model answers
+  fetch(apiBase(s.node) + `/api/local/${encodeURIComponent(s.id)}/chat`,
+        { method: "POST", body: JSON.stringify({ text }) })
+    .then(r => r.json().then(j => ({ ok: r.ok, j })))
+    .then(({ ok, j }) => {
+      if (cur !== s) return;
+      pendingEcho.forEach(p => p.el.classList.remove("pending")); pendingEcho = [];
+      if (ok && j && j.text) line("as", j.text);
+      else line("err", (j && j.error) || "local chat request failed");
+      setRunning(false);
+    })
+    .catch(() => {
+      // network failure = the daemon never got it: pull the echo and hand the text back
+      if (cur !== s) return;
+      pendingEcho.forEach(p => p.el.remove()); pendingEcho = [];
+      restoreText(text);
+      line("err", "local chat request failed (network) - your text is back in the box");
+      setRunning(false);
+    });
+}
+
+// The service/model tag in the chat top bar. Engine comes from the session; the model is
+// the client-side per-turn override (rides on cur.model) or blank when we defer to the node
+// default. Click opens a small menu to set the model/effort for upcoming turns on this chat.
+function updateEngineBadge() {
+  const b = $("engine");
+  if (!b) return;
+  if (!cur) { b.style.display = "none"; return; }
+  const em = engineMeta(cur);
+  b.style.display = "inline-flex";
+  b.style.color = em.color;
+  b.textContent = em.glyph + " " + em.label + " ";
+  const car = document.createElement("span"); car.className = "car"; car.textContent = "▾";
+  b.append(car);
+}
+const CLAUDE_MODELS = [
+  { id: "", name: "Default (node pin)" },
+  { id: "claude-opus-4-8", name: "Opus" },
+  { id: "claude-sonnet-5", name: "Sonnet" },
+  { id: "claude-fable-5", name: "Fable" },
+  { id: "claude-haiku-4-5-20251001", name: "Haiku" },
+];
+const EFFORTS = ["low", "medium", "high", "max"];
+function closeModelMenu() { const m = $("modelmenu"); if (m) m.remove(); }
+// Persist the selector's choice as a per-SESSION pin on the session's own node: set fable in
+// a chat ONCE and it stays fable across reloads/evictions until "Default" clears it (every
+// other chat keeps the node default). A fresh chat has no real sid yet - stash the choice and
+// flush it when the session_id/sid rebind lands.
+let pendingModelPin;
+function setModelPin(s, id) {
+  s.pin = id || null;
+  if (s.fresh || String(s.id).startsWith("new-")) { pendingModelPin = id || null; return; }
+  const url = apiBase(s.node) + "/api/modelpin/" + encodeURIComponent(s.id);
+  if (id) fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: id }) }).catch(() => {});
+  else fetch(url, { method: "DELETE" }).catch(() => {});
+}
+function flushModelPin(s) {
+  if (pendingModelPin === undefined) return;
+  const id = pendingModelPin; pendingModelPin = undefined;
+  if (id) setModelPin(s, id);
+}
+function openModelMenu(e) {
+  e.stopPropagation();
+  if ($("modelmenu")) return closeModelMenu();
+  if (!cur) return;
+  const m = document.createElement("div"); m.id = "modelmenu";
+  const hd = (t) => { const h = document.createElement("div"); h.className = "hd"; h.textContent = t; return h; };
+  if (["gemini", "lmstudio", "codex"].includes(cur.engine)) {
+    const names = { gemini: "Antigravity", lmstudio: "LM Studio", codex: "Codex" };
+    const notes = { gemini: "model is set inside Antigravity",
+                    lmstudio: "model set by the LM Studio CLI",
+                    codex: "model is set inside codex (/model)" };
+    m.append(hd(names[cur.engine]));
+    const note = document.createElement("div"); note.className = "mi";
+    note.style.cursor = "default"; note.style.color = "var(--dim)";
+    note.textContent = notes[cur.engine];
+    m.append(note);
+    if (isLocalChat(cur)) {   // chat mode keeps its own conversation - offer a reset
+      const sep = document.createElement("div"); sep.className = "sep"; m.append(sep);
+      const cb = document.createElement("button"); cb.className = "mi";
+      cb.textContent = "Clear chat history";
+      cb.onclick = () => {
+        const s = cur;
+        fetch(apiBase(s.node) + `/api/local/${encodeURIComponent(s.id)}/chat`, { method: "DELETE" }).catch(() => {});
+        closeModelMenu();
+        if (cur === s && !termModeFor(s)) openLocalChat(s);
+      };
+      m.append(cb);
+    }
+    if (isLocalChat(cur)) {
+      // A wedged CLI used to mean ssh + tmux kill-session by hand. This kills the
+      // row's tmux server-side and reopens fresh.
+      const sep2 = document.createElement("div"); sep2.className = "sep"; m.append(sep2);
+      const rb = document.createElement("button"); rb.className = "mi";
+      rb.textContent = "Restart session";
+      rb.onclick = () => {
+        const s = cur;
+        closeModelMenu();
+        fetch(apiBase(s.node) + `/api/term/${encodeURIComponent(s.id)}/restart`, { method: "POST" })
+          .catch(() => {})
+          .finally(() => { if (cur === s) open(s); });
+      };
+      m.append(rb);
+    }
+  } else {
+    m.append(hd("model"));
+    for (const mo of CLAUDE_MODELS) {
+      const b = document.createElement("button");
+      b.className = "mi" + ((cur.model || "") === mo.id ? " on" : "");
+      b.textContent = mo.name;
+      b.onclick = () => { cur.model = mo.id || undefined; setModelPin(cur, mo.id); closeModelMenu(); updateEngineBadge(); };
+      m.append(b);
+    }
+    const sep = document.createElement("div"); sep.className = "sep"; m.append(sep);
+    m.append(hd("effort"));
+    for (const ef of EFFORTS) {
+      const b = document.createElement("button");
+      b.className = "mi" + ((cur.effort || "") === ef ? " on" : "");
+      b.textContent = ef;
+      b.onclick = () => { cur.effort = ef; closeModelMenu(); };
+      m.append(b);
+    }
+  }
+  document.body.appendChild(m);
+  const r = e.currentTarget.getBoundingClientRect();
+  // Below the badge when it fits, else FLIP ABOVE it: on mobile the badge lives in the
+  // bottom drawer, so with no keyboard raising the bar, downward = off the screen.
+  // visualViewport (not innerHeight) so the flip also works pinch-zoomed / keyboard-up.
+  const vv = window.visualViewport;
+  const vTop = vv ? vv.offsetTop : 0, vBot = vv ? vv.offsetTop + vv.height : innerHeight;
+  let top = r.bottom + 4;
+  if (top + m.offsetHeight > vBot - 6) top = Math.max(vTop + 6, r.top - m.offsetHeight - 4);
+  m.style.top = top + "px";
+  m.style.left = Math.max(6, Math.min(r.left, innerWidth - m.offsetWidth - 6)) + "px";
+}
+document.addEventListener("click", closeModelMenu);
+
+// ---- terminal mode: the actual interactive claude TUI over a tmux-backed pty ----
+// This is the alternative to the chat pipeline: instead of reshaping `claude -p` jsonl into
+// bubbles, we stream the REAL claude TUI (tokens/effort footer, thinking, /command popover)
+// from a pty. tmux holds the process, so closing the app just detaches - reopening reattaches.
+let term = null, fitAddon = null, termSock = null, ctrlArmed = false, fitPending = null;
+// Chat is the default view now (terminal is opt-in). One-time resets clear legacy
+// terminal preferences so the new default lands on every device once, then normal
+// per-toggle choices are remembered. Codex needs its own migration because it stores
+// its view separately; without it, phones that ever used Codex's terminal kept
+// reopening there after the system-wide chat-default change.
+try { if (!localStorage.getItem("hubViewReset")) { localStorage.removeItem("hubTerm"); localStorage.setItem("hubViewReset", "1"); } } catch (e) {}
+try { if (!localStorage.getItem("hubCodexViewReset")) { localStorage.removeItem("hubCodexTerm"); localStorage.setItem("hubCodexViewReset", "1"); } } catch (e) {}
+let termMode = localStorage.getItem("hubTerm") === "1";  // default (unset) = chat
+// Codex is chat-first in Hub; its terminal remains one tap away and remembers its own choice.
+let codexTermMode = localStorage.getItem("hubCodexTerm") === "1";
+// The local-model row is chat-first too: a plain conversational view straight to the
+// local model, with the full agentic CLI one toggle away. Its own remembered choice.
+let localTermMode = localStorage.getItem("hubLocalTerm") === "1";
+// A new Codex chat has to boot once in its TUI before it has a durable session id.
+// Report that forced startup view as terminal too, so the mobile toggle never says
+// "chat" while an xterm is actually on screen.
+function termModeFor(s) {
+  if (s && s.engine === "codex") return !!s.fresh || codexTermMode;
+  if (s && s.engine === "lmstudio") return localTermMode;
+  return termMode;
+}
+
+// light / dark theme. The class is applied pre-paint by an inline <head> script
+// (anti-flash); here we only handle the toggle, the button icon, and the mobile
+// status-bar colour. Terminal (#term/xterm) stays dark in both themes by design.
+// Icons are outline SVGs (stroke-width 2, round caps) to match the send airplane.
+const SVG_A = 'viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+const SUN_SVG = `<svg ${SVG_A}><circle cx="12" cy="12" r="4"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.2" y1="4.2" x2="5.6" y2="5.6"></line><line x1="18.4" y1="18.4" x2="19.8" y2="19.8"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.2" y1="19.8" x2="5.6" y2="18.4"></line><line x1="18.4" y1="5.6" x2="19.8" y2="4.2"></line></svg>`;
+const MOON_SVG = `<svg ${SVG_A}><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"></path></svg>`;
+let lightMode = document.documentElement.classList.contains("light");
+function applyTheme() {
+  document.documentElement.classList.toggle("light", lightMode);
+  const b = $("themebtn"); if (b) b.innerHTML = lightMode ? MOON_SVG : SUN_SVG;
+  const m = document.querySelector('meta[name=theme-color]');
+  if (m) m.content = lightMode ? "#D8E0D8" : "#101014";
+}
+function toggleTheme() {
+  lightMode = !lightMode;
+  try { localStorage.setItem("hubLight", lightMode ? "1" : "0"); } catch (e) {}
+  applyTheme();
+  refresh(); refreshCTs();   // recolour library tags for the new mode (tagCol depends on lightMode)
+}
+applyTheme();
+
+function updateModeBtn() {
+  const b = $("modeBtn"); if (!b) return;
+  const t = termModeFor(cur);   // true = terminal view. Highlight the segment for the CURRENT view.
+  b.querySelectorAll(".mseg").forEach(s => s.classList.toggle("on", (s.dataset.m === "term") === t));
+}
+function toggleMode() {
+  const isCodex = cur && cur.engine === "codex";
+  const isLocal = cur && cur.engine === "lmstudio";
+  if (isCodex && cur.fresh) return;  // Codex must finish its one-time TUI bootstrap first.
+  if (isCodex) codexTermMode = !codexTermMode;
+  else if (isLocal) localTermMode = !localTermMode;
+  else termMode = !termMode;
+  const nextTerm = isCodex ? codexTermMode : isLocal ? localTermMode : termMode;
+  const key = isCodex ? "hubCodexTerm" : isLocal ? "hubLocalTerm" : "hubTerm";
+  if (PANE) {   // pane-local choice: persist it on the PARENT's grid entry, not the shared default
+    try { parent.postMessage({ hubPane: "mode", id: paneKey, mode: nextTerm ? "term" : "chat" }, location.origin); } catch (e) {}
+  } else {
+    try { localStorage.setItem(key, nextTerm ? "1" : "0"); } catch (e) {}
+  }
+  updateModeBtn();
+  if (cur) { cur.blank = false; open(cur); }   // an explicit toggle honours the terminal choice
+}
+function showChatUI() {
+  if (termSock) { termSock.onclose = null; termSock.close(); termSock = null; }
+  $("term").style.display = "none"; $("keybar").style.display = "none";
+  $("chat").style.display = "block"; $("composer").style.display = "flex";
+  $("ctx").style.display = "inline";
+}
+function showTermUI() {
+  closeCodexInput();
+  if (sock) { sock.onclose = null; sock.close(); sock = null; }
+  setRunning(false);
+  $("chat").style.display = "none"; $("composer").style.display = "none";
+  $("term").style.display = "block"; $("keybar").style.display = "flex";
+}
+function ensureTerm() {
+  if (term) return;
+  term = new Terminal({
+    cursorBlink: true, fontSize: 13, scrollback: 6000, allowProposedApi: true,
+    fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
+    theme: { background: "#0b0b0f", foreground: "#d8d8de", cursor: "#FFC04B" },
+  });
+  fitAddon = new FitAddon.FitAddon();
+  term.loadAddon(fitAddon);
+  term.open($("term"));
+  try {          // WebGL renderer: xterm's default DOM renderer rebuilds the whole
+                 // viewport per scrolled line - on a phone that janks the main thread,
+                 // starving touchmove + rAF (the stuttery scrolling). DOM fallback if
+                 // webgl is unavailable or the context is lost.
+    const gl = new WebglAddon.WebglAddon();
+    gl.onContextLoss(() => gl.dispose());
+    term.loadAddon(gl);
+  } catch (e) {}
+  term.onData(d => {
+    if (ctrlArmed && d.length === 1) {           // sticky Ctrl for the next typed char (mobile)
+      const lc = d.toLowerCase().charCodeAt(0);
+      if (lc >= 97 && lc <= 122) d = String.fromCharCode(lc - 96);
+      ctrlArmed = false; updateCtrlBtn();
+    }
+    sendKeys(d);
+  });
+  $("term").addEventListener("click", () => term.focus());
+  // xterm ignores touches whenever the app has mouse tracking on - and tmux (mouse on)
+  // always does - so drag-to-scroll was dead on the phone. Convert vertical drags into
+  // synthetic wheel events: xterm reports each one to tmux like a desktop wheel tick.
+  // ONE event == ONE line (xterm sends a single tick regardless of deltaY, and
+  // hub-tmux.conf rebinds copy-mode wheel from tmux's 5-line default to 1), so the
+  // scroll tracks the finger 1:1; release velocity keeps emitting for a native fling.
+  let touchY = null, touchAcc = 0, flingRaf = 0, samples = [];
+  const tEl = $("term");
+  function rowH() { return Math.max(8, tEl.clientHeight / ((term && term.rows) || 30)); }
+  function emitScroll() {                  // drain touchAcc as one wheel event per line
+    const lines = Math.trunc(touchAcc / rowH());
+    if (!lines) return;
+    touchAcc -= lines * rowH();
+    const r = tEl.getBoundingClientRect();
+    const s = tEl.querySelector(".xterm-screen") || tEl;
+    for (let i = Math.min(Math.abs(lines), 30); i > 0; i--)
+      s.dispatchEvent(new WheelEvent("wheel", { deltaY: Math.sign(lines), deltaMode: 1,
+        bubbles: true, cancelable: true,
+        clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));
+  }
+  tEl.addEventListener("touchstart", e => {
+    cancelAnimationFrame(flingRaf);
+    touchY = e.touches.length === 1 ? e.touches[0].clientY : null;
+    touchAcc = 0; samples = touchY === null ? [] : [[e.timeStamp, touchY]];
+  }, { passive: true });
+  tEl.addEventListener("touchmove", e => {
+    if (touchY === null || e.touches.length !== 1 || !term) return;
+    e.preventDefault();                    // the page must never pan/zoom under the drag
+    const y = e.touches[0].clientY;
+    touchAcc += touchY - y;
+    touchY = y;
+    samples.push([e.timeStamp, y]);        // ~120ms window -> liftoff velocity
+    while (samples.length > 1 && samples[0][0] < e.timeStamp - 120) samples.shift();
+    emitScroll();
+  }, { passive: false });
+  tEl.addEventListener("touchcancel", () => { touchY = null; }, { passive: true });
+  let flingV = 0;   // live coast velocity: successive same-direction flicks compound
+  tEl.addEventListener("touchend", e => {
+    if (touchY === null) return;
+    touchY = null;
+    // Liftoff velocity from the last ~120ms of movement, NOT the final move event:
+    // fingers decelerate as they roll off the glass, so a per-event reading collapses
+    // to ~0 on many flicks and the fling dies at random ("sporadic force stop").
+    const fresh = samples.filter(s => s[0] >= e.timeStamp - 120);
+    if (fresh.length < 2) { flingV = 0; return; }     // held still before lifting = stop
+    const [t0, y0] = fresh[0], [t1, y1] = fresh[fresh.length - 1];
+    let v = (y0 - y1) / Math.max(8, t1 - t0);
+    // acceleration: a flick thrown while still coasting the same way inherits the
+    // leftover speed. Top speed is capped at ~1 line per frame - that is all the
+    // per-line tmux redraw can actually SHOW; excess speed just queued into a
+    // stall-and-jump backlog, so extra momentum buys a LONGER coast instead.
+    if (Math.sign(v) === Math.sign(flingV)) v += 0.7 * flingV;
+    const cap = rowH() / 5;                // ~3 screens/s peak (tmux benches fine at this)
+    v = Math.max(-cap, Math.min(cap, v));
+    if (Math.abs(v) < 0.25) { flingV = 0; return; }   // slow release: stop dead
+    let last = performance.now();
+    const step = now => {
+      const dt = Math.min(200, now - last); last = now;
+      touchAcc += v * dt;
+      v *= Math.pow(0.9985, dt);           // long floaty coast (~2s from a hard flick)
+      emitScroll();
+      flingV = v;
+      // cut the coast at ~9 lines/s: below that the crawl is too slow to read as
+      // motion and just feels like a phantom brake dragging the view
+      if (Math.abs(v) > 0.15) flingRaf = requestAnimationFrame(step);
+      else flingV = 0;
+    };
+    flingRaf = requestAnimationFrame(step);
+  }, { passive: true });
+  // Chrome synthesizes mouse events around taps/long-presses; xterm's mouse reporting
+  // turns them into tmux clicks and drags, and in copy-mode a phantom drag ends in
+  // copy-pipe-and-cancel = the view SNAPS back to the bottom mid-read. Swallow real-mouse
+  // buttons before xterm sees them - EXCEPT shift+mouse, xterm's standard "bypass the
+  // app, select locally" chord (desktop selection; synthetic touch events never carry
+  // shift). Releasing a shift-selection auto-copies it, tmux style.
+  for (const evName of ["mousedown", "mouseup", "mousemove"])
+    tEl.addEventListener(evName, e => { if (!e.shiftKey) e.stopPropagation(); }, true);
+  tEl.addEventListener("mouseup", e => {
+    if (e.shiftKey && term && term.hasSelection()) copyText(term.getSelection(), null);
+  }, true);
+  tEl.addEventListener("contextmenu", e => { e.stopPropagation(); e.preventDefault(); }, true);
+  window.addEventListener("resize", () => { clearTimeout(fitPending); fitPending = setTimeout(fitTerm, 120); });
+}
+function fitTerm() {
+  if (!term || $("term").style.display === "none") return;
+  try { fitAddon.fit(); } catch (e) {}
+  if (termSock && termSock.readyState === 1)
+    termSock.send(JSON.stringify({ t: "r", cols: term.cols, rows: term.rows }));
+}
+function sendKeys(d) { if (termSock && termSock.readyState === 1) termSock.send(new TextEncoder().encode(d)); }
+function kb(s) { sendKeys(s); if (term) term.focus(); }
+function toggleCtrl() { ctrlArmed = !ctrlArmed; updateCtrlBtn(); if (term) term.focus(); }
+function updateCtrlBtn() { const b = $("ctrlBtn"); if (b) b.classList.toggle("on", ctrlArmed); }
+
+// ---- terminal copy tools ----
+// The terminal is a GPU canvas - there is no DOM text to long-press-select on mobile.
+// These read xterm's BUFFER instead: 🔗 finds URLs (re-joining lines the TUI hard-wrapped,
+// stripping the padding that poisons a manual copy), ⧉ dumps the text into a textarea
+// where native selection works.
+function openTmodal(title) {
+  $("tmtitle").textContent = title; $("tmbody").innerHTML = "";
+  $("tmrow").innerHTML = '<button onclick="closeTmodal()">close</button>';
+  $("tmodal").style.display = "block";
+}
+function closeTmodal() { $("tmodal").style.display = "none"; }
+async function copyText(s, btn) {
+  let ok = false;
+  try { await navigator.clipboard.writeText(s); ok = true; }
+  catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = s; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand("copy"); } catch (e2) {}
+    ta.remove();
+  }
+  if (btn) { const t = btn.textContent; btn.textContent = ok ? "✓ copied" : "failed"; setTimeout(() => { btn.textContent = t; }, 1200); }
+}
+// buffer rows -> logical lines: rows xterm itself wrapped (isWrapped) are glued back
+function termLogicalLines(maxBack) {
+  const buf = term.buffer.active, total = buf.length, start = Math.max(0, total - maxBack);
+  const out = [];
+  for (let i = start; i < total; i++) {
+    const l = buf.getLine(i);
+    if (!l) continue;
+    const s = l.translateToString(true);
+    if (l.isWrapped && out.length) out[out.length - 1] += s;
+    else out.push(s);
+  }
+  return out;
+}
+const URL_CONT = /^[A-Za-z0-9\-._~:/?#@!$&'()*+,;=%]+$/;
+function grabUrls() {
+  if (!term) return;
+  const lines = termLogicalLines(4000), found = [];
+  for (let i = 0; i < lines.length; i++) {
+    const re = /https?:\/\/[A-Za-z0-9\-._~:/?#@!$&'()*+,;=%]+/g;
+    let m;
+    while ((m = re.exec(lines[i])))
+      found.push({ url: m[0], atEol: m.index + m[0].length === lines[i].length, next: i + 1 });
+  }
+  for (const f of found) {
+    // ran to end-of-line: the TUI likely hard-broke the URL - glue following lines
+    // while they are pure URL charset (after shedding leading borders/indent)
+    for (let j = f.next; f.atEol && j < lines.length; j++) {
+      const cont = lines[j].replace(/^[\s│┃┆·|>]+/, "");
+      if (cont.length > 2 && URL_CONT.test(cont)) f.url += cont;
+      else break;
+    }
+    f.url = f.url.replace(/[).,;'"”’]+$/, "");
+  }
+  const urls = [...new Set(found.map(f => f.url))].reverse().slice(0, 12);  // newest first
+  openTmodal("URLs on screen");
+  if (!urls.length) {
+    $("tmbody").innerHTML = '<div style="color:var(--dim);font-size:13px">none found in the visible screen or recent scrollback</div>';
+    return;
+  }
+  for (const u of urls) {
+    const row = document.createElement("div"); row.className = "url";
+    const c = document.createElement("code");
+    c.textContent = u.length > 200 ? u.slice(0, 150) + " … " + u.slice(-30) : u;
+    const b = document.createElement("button"); b.textContent = "copy"; b.onclick = () => copyText(u, b);
+    const o = document.createElement("button"); o.textContent = "open"; o.onclick = () => window.open(u, "_blank");
+    row.append(c, b, o); $("tmbody").appendChild(row);
+  }
+}
+function copyView() {
+  if (!term) return;
+  const txt = termLogicalLines(4000).map(l => l.trimEnd()).join("\n")
+    .replace(/\n{4,}/g, "\n\n\n").replace(/^\n+/, "");
+  openTmodal("screen text (select what you need)");
+  const ta = document.createElement("textarea");
+  ta.readOnly = true; ta.value = txt;
+  $("tmbody").appendChild(ta);
+  const b = document.createElement("button"); b.textContent = "copy all";
+  b.onclick = () => copyText(txt, b);
+  $("tmrow").prepend(b);
+  ta.scrollTop = ta.scrollHeight;
+}
+
+function ptyUrl(s) {
+  const p = (location.protocol === "https:" ? "wss://" : "ws://") + location.host;
+  const base = s.node === hubNode ? "" : "/node/" + s.node;
+  const q = new URLSearchParams();
+  q.set("cols", (term && term.cols) || 100); q.set("rows", (term && term.rows) || 30);
+  if (s.fresh) q.set("new", "1");
+  if (s.model) q.set("model", s.model);
+  if (s.ctid) q.set("ctid", s.ctid);
+  if (s.engine) q.set("engine", s.engine);
+  return p + base + "/pty/" + s.id + "?" + q.toString();
+}
+function openTerm(s) {
+  showTermUI();
+  ensureTerm();
+  term.reset();
+  fitTerm();
+  connectTerm(s);
+}
+function connectTerm(s) {
+  if (termSock) { termSock.onclose = null; termSock.close(); termSock = null; }
+  const ws = new WebSocket(ptyUrl(s));
+  ws.binaryType = "arraybuffer";
+  termSock = ws;
+  ws.onopen = () => { fitTerm(); term.focus(); };
+  ws.onmessage = m => {
+    if (typeof m.data === "string") {
+      let j; try { j = JSON.parse(m.data); } catch (e) { return; }
+      if (j.t === "sid" && cur === s) {         // a fresh terminal learned its real session id
+        if (PANE) paneSid(j.id);
+        s.id = j.id; s.fresh = false;
+        flushModelPin(s);
+        setActive(s.id); refresh();
+        // New Codex chats bootstrap in the TUI because there is no rollout to attach
+        // to yet. Once the id exists, honor the user's chat-first preference instead
+        // of leaving an xterm visible under a now-highlighted chat icon.
+        if (s.engine === "codex" && !codexTermMode) return openChat(s);
+        updateModeBtn();
+      } else if (j.t === "err") { term.write("\r\n\x1b[31m[hub] " + j.d + "\x1b[0m\r\n"); }
+    } else {
+      if (PANE) {
+        try { parent.postMessage({ hubPane: "changed", id: paneKey }, location.origin); } catch (e) {}
+      }
+      term.write(new Uint8Array(m.data));
+    }
+  };
+  ws.onclose = () => { if (cur === s && termModeFor(s)) setTimeout(() => { if (cur === s && termModeFor(s)) connectTerm(s); }, 1200); };
+}
+
+// Codex's chat composer is a tiny, short-lived pty attachment to the SAME tmux
+// session terminal mode uses. It never spawns a second `codex resume` writer: tmux
+// attaches to the existing session (or starts it once), receives the prompt, then the
+// client detaches while the persistent Codex TUI keeps working.
+let codexInputSock = null, codexInputSession = null;
+function closeCodexInput() {
+  const ws = codexInputSock;
+  codexInputSock = null; codexInputSession = null;
+  if (ws) { ws.onclose = null; try { ws.close(); } catch (e) {} }
+}
+function refreshCodexTranscript(s) {
+  if (cur === s && !termModeFor(s) && s.engine === "codex") connect(s);
+}
+function scheduleCodexTranscriptRefresh(s) {
+  // Codex writes its rollout independently of this short pty client. Re-read a few
+  // times as the turn progresses; each read is the durable source of truth.
+  for (const delay of [900, 2200, 5000, 10000, 20000, 40000, 70000])
+    setTimeout(() => refreshCodexTranscript(s), delay);
+}
+function sendCodex(s, text) {
+  // (fresh-session refusal lives in send(), BEFORE the composer is cleared)
+  closeCodexInput();
+  const ws = new WebSocket(ptyUrl(s));
+  ws.binaryType = "arraybuffer";
+  codexInputSock = ws; codexInputSession = s;
+  let sent = false, readyTimer = null, fallbackTimer = null;
+  const deliver = () => {
+    if (sent || ws.readyState !== WebSocket.OPEN) return;
+    sent = true;
+    try {
+      // Mark the prompt as an explicit bracketed paste. Sending a whole prompt as one
+      // raw PTY burst makes Codex's paste detector keep the following CR inside that
+      // burst, where it becomes a newline (the chat looked like Shift+Enter). Closing
+      // the paste explicitly before sending CR makes the latter a real submit key.
+      ws.send(new TextEncoder().encode("\x1b[200~" + text + "\x1b[201~"));
+      setTimeout(() => {
+        if (ws.readyState === WebSocket.OPEN)
+          ws.send(new Uint8Array([13]));
+      }, 300);
+    }
+    catch (e) { return; }
+    // Let tmux hand the keystrokes to Codex, then detach only this browser client.
+    setTimeout(() => { if (codexInputSock === ws) ws.close(); }, 850);
+  };
+  ws.onopen = () => { fallbackTimer = setTimeout(deliver, 2800); };
+  ws.onmessage = m => {
+    if (typeof m.data === "string") {
+      let j; try { j = JSON.parse(m.data); } catch (e) { return; }
+      if (j.t === "err") line("err", j.d || "Codex terminal error");
+      return;
+    }
+    // The first bytes are often tmux's own repaint, before Codex has installed its
+    // composer. Let that repaint settle, then submit with Codex's normal Enter/Ctrl-M.
+    if (!readyTimer) readyTimer = setTimeout(deliver, 800);
+  };
+  ws.onclose = () => {
+    if (readyTimer) clearTimeout(readyTimer);
+    if (fallbackTimer) clearTimeout(fallbackTimer);
+    if (codexInputSock === ws) { codexInputSock = null; codexInputSession = null; }
+    if (!sent && cur === s) {
+      pendingEcho.forEach(p => p.el.remove()); pendingEcho = [];
+      restoreText(text);
+      line("err", "Codex terminal did not accept the message - your text is back in the box; try term mode");
+    }
+    if (cur === s) setRunning(false);
+    if (sent) scheduleCodexTranscriptRefresh(s);
+  };
+}
+
+// optimistic: drop the chat from the list + array RIGHT NOW, fire the request in the
+// background. deletedIds keeps it hidden even if a stale cached list still carries it.
+function dropSession(id) {
+  gridRemove(id);   // a deleted/archived chat can't stay up in a grid pane
+  deletedIds.add(id);
+  if (pinned.delete(id)) { cachePins(); fetch("/api/pins/" + encodeURIComponent(id), { method: "DELETE" }).catch(() => {}); }
+  if (stashed.delete(id)) { cacheStash(); fetch("/api/stash/" + encodeURIComponent(id), { method: "DELETE" }).catch(() => {}); }
+  sessions = sessions.filter(s => s.id !== id);
+  const d = document.querySelector(`#list .sess[data-sid="${CSS.escape(id)}"]`);
+  if (d) d.remove();
+}
+function clearCur(msg) {
+  cur = null; $("chat").innerHTML = `<div id="empty">${msg}</div>`;
+  $("ctx").textContent = ""; $("tcwd").textContent = "";
+  waits = []; updateWaitBar();
+}
+// Assistant bubbles render **bold** (the one markdown-ism worth keeping in chat mode);
+// everything else stays literal text. Escape first so model output can't inject HTML.
+const escHtml = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+// Message timestamps render in the BROWSER's local timezone from the jsonl's UTC ISO
+// string (or a client Date.now() for optimistic echoes) - never converted server-side.
+function dayKey(ts) {
+  const d = new Date(ts);
+  return isNaN(d.getTime()) ? null : d.toDateString();
+}
+function fmtTime(ts) {
+  const d = new Date(ts);
+  return isNaN(d.getTime()) ? "" : d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+function fmtFullTs(ts) {
+  const d = new Date(ts);
+  return isNaN(d.getTime()) ? "" : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+// A date-separator row is inserted whenever the local day changes from the last
+// timestamped message in #chat - found by walking back for the last dataset.day (set on
+// both messages and separators), not a module-level var, so it stays correct across
+// disk-replay + live-tail + reconnect without any extra reset bookkeeping.
+function maybeDateSep(c, ts) {
+  const key = dayKey(ts);
+  if (!key) return;
+  let last = null;
+  for (let i = c.children.length - 1; i >= 0; i--) {
+    if (c.children[i].dataset.day) { last = c.children[i].dataset.day; break; }
+  }
+  if (last === key) return;
+  const sep = document.createElement("div");
+  sep.className = "datesep"; sep.dataset.day = key;
+  sep.textContent = new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  c.appendChild(sep);
+}
+function el(cls, text, ts) {
+  const d = document.createElement("div"); d.className = "ev " + cls;
+  if (cls === "as") d.innerHTML = escHtml(text).replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+  else d.textContent = text;
+  if (ts) {
+    const day = dayKey(ts);
+    if (day) d.dataset.day = day;
+    const t = document.createElement("span"); t.className = "evts";
+    t.textContent = fmtTime(ts); t.title = fmtFullTs(ts);
+    d.appendChild(t);
+  }
+  return d;
+}
+// Stick-to-bottom: only follow new content when the user is already near the bottom.
+// If they've scrolled up to read, an incoming response leaves their view where it is.
+function nearBottom(c) { return c.scrollHeight - c.scrollTop - c.clientHeight < 120; }
+function line(cls, text, ts) {
+  const c = $("chat"); const stick = nearBottom(c);
+  if (ts) maybeDateSep(c, ts);
+  c.appendChild(el(cls, text, ts));
+  if (stick) c.scrollTop = c.scrollHeight;
+}
+function setRunning(on) {
+  running = on;
+  $("spin").style.display = on ? "inline" : "none";
+  $("stop").style.display = on ? "inline-flex" : "none";
+  updateSendBtn();
+}
+// All three composer-button states are 24x24 SVGs so the flex box centers each one
+// identically (text glyphs like ↧/■ never optically center). send=paper plane (Feather),
+// queue=down arrow, stop=rounded square.
+const SEND_ICON = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
+const QUEUE_ICON = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="4" x2="12" y2="16"></line><polyline points="6 11 12 17 18 11"></polyline></svg>';
+const STOP_ICON = '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" stroke="none"><rect x="6.5" y="6.5" width="11" height="11" rx="2.5"></rect></svg>';
+// the composer button is context-aware: send when idle, queue when you type mid-turn,
+// or interrupt (halt, like Esc in the CLI) when a turn is running and the box is empty.
+function updateSendBtn() {
+  const b = $("send"), hasText = $("input").value.trim().length > 0;
+  b.className = "";
+  if (!running) { b.innerHTML = SEND_ICON; b.title = "send"; }
+  else if (hasText) { b.innerHTML = QUEUE_ICON; b.className = "queue"; b.title = "queue"; }
+  else { b.innerHTML = STOP_ICON; b.className = "stop"; b.title = "stop"; }
+}
+function composerAction() {
+  if (cur && (cur.engine === "codex" || isLocalChat(cur))) {
+    if (!running) return send();
+    return;  // one request per turn (no host queue); term mode owns interrupt/steer controls.
+  }
+  if (!running) return send();
+  if ($("input").value.trim()) return queueMsg();
+  return interrupt();
+}
+// Queueing is HOST-side: a queued message is POSTed to the daemon, which drains it after
+// the current turn. So it survives closing the app or switching chats; the browser's `queue`
+// array just mirrors the host. Optimistic update, then reconcile with the server's response.
+function queueMsg() {
+  if (!cur || cur.fresh) return;
+  const text = $("input").value.trim();
+  if (!text) return;
+  const s = cur;
+  $("input").value = ""; clearDraft(s); updateSendBtn();
+  queue.push(text); updateQueueBar();
+  fetch(apiBase(s.node) + `/api/sessions/${s.id}/queue`,
+        { method: "POST", body: JSON.stringify({ text, cwd: s.cwd, ctid: s.ctid }) })
+    .then(r => r.json())
+    .then(r => { if (r.queue) { queue = r.queue; updateQueueBar(); } else throw 0; })
+    .catch(() => {
+      // the host never took it - pull it off the local bar and hand the text back
+      const i = queue.lastIndexOf(text);
+      if (i >= 0) { queue.splice(i, 1); updateQueueBar(); updateSendBtn(); }
+      if (cur === s) { restoreText(text); line("err", "queue failed - your text is back in the box"); }
+    });
+}
+function cancelQueue(idx) {
+  if (!cur) return;
+  queue.splice(idx, 1); updateQueueBar(); updateSendBtn();
+  fetch(apiBase(cur.node) + `/api/sessions/${cur.id}/queue?idx=${idx}`, { method: "DELETE" })
+    .then(r => r.json()).then(r => { if (r.queue) { queue = r.queue; updateQueueBar(); } }).catch(() => {});
+}
+async function refreshQueue(s) {
+  try {
+    const r = await fetch(apiBase(s.node) + `/api/sessions/${s.id}/queue`).then(r => r.json());
+    if (cur === s && r.queue) { queue = r.queue; updateQueueBar(); updateSendBtn(); }
+  } catch (e) {}
+}
+function updateQueueBar() {
+  const bar = $("queuebar");
+  if (!queue.length) { bar.style.display = "none"; bar.innerHTML = ""; return; }
+  bar.style.display = "flex";
+  bar.innerHTML = "";
+  queue.forEach((text, i) => {
+    const row = document.createElement("div"); row.className = "qrow";
+    const h = document.createElement("span"); h.className = "qhint"; h.textContent = "queued";
+    const t = document.createElement("span"); t.className = "qtext"; t.textContent = text;
+    const x = document.createElement("button"); x.textContent = "✕"; x.onclick = () => cancelQueue(i);
+    row.append(h, t, x); bar.append(row);
+  });
+}
+// soele-wait: like the queue bar above, this is HOST-side state (the daemon's poller owns
+// resolution) - the browser just mirrors it and offers a cancel button.
+function cancelWait(id) {
+  if (!cur) return;
+  const s = cur;
+  waits = waits.filter(w => w.id !== id); updateWaitBar();
+  fetch(apiBase(s.node) + `/api/wait/${encodeURIComponent(id)}`, { method: "DELETE" }).catch(() => {});
+}
+async function refreshWaits(s) {
+  if (!s || s.fresh) { waits = []; updateWaitBar(); return; }
+  try {
+    const r = await fetch(apiBase(s.node) + `/api/waits?sid=${encodeURIComponent(s.id)}`).then(r => r.json());
+    if (cur === s) { waits = r.waits || []; updateWaitBar(); }
+  } catch (e) {}
+}
+function updateWaitBar() {
+  const bar = $("waitbar");
+  if (!waits.length) { bar.style.display = "none"; bar.innerHTML = ""; return; }
+  bar.style.display = "flex";
+  bar.innerHTML = "";
+  waits.forEach(w => {
+    const chip = document.createElement("span"); chip.className = "chip";
+    const t = document.createElement("span"); t.textContent = "⏳ " + w.desc;
+    const x = document.createElement("button"); x.textContent = "✕"; x.title = "cancel";
+    x.onclick = () => cancelWait(w.id);
+    chip.append(t, x); bar.append(chip);
+  });
+}
+function toolLine(b) {
+  const i = b.input || {};
+  const hint = i.description || i.command || i.file_path || i.pattern || i.prompt || i.url || "";
+  return "⚒ " + b.name + (hint ? "  " + String(hint).slice(0, 110) : "");
+}
+
+function render(ev) {
+  switch (ev.type) {
+    case "session_id":  // a NEW chat just learned its real id; rebind + tail it
+      if (cur && cur.fresh && ev.id) {
+        if (PANE) paneSid(ev.id);
+        cur.id = ev.id; cur.fresh = false;
+        flushModelPin(cur);
+        connect(cur);
+      }
+      break;
+    case "hub_running": setRunning(true); break;
+    case "assistant": {
+      setRunning(true);
+      if (PANE) {
+        try { parent.postMessage({ hubPane: "changed", id: paneKey }, location.origin); } catch (e) {}
+      }
+      for (const b of (ev.message && ev.message.content) || []) {
+        if (b.type === "text" && b.text.trim()) line("as", b.text, ev.timestamp);
+        else if (b.type === "tool_use") line("tool", toolLine(b));
+      }
+      const u = ev.message && ev.message.usage;
+      if (u) {  // in = latest full context (incl. cache); out = summed across the turn's steps
+        turnIn = (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+        turnSpent += u.output_tokens || 0;  // generated tokens - stable regardless of cache state
+        ctxTokens = turnIn; updateCtx();
+      }
+      break;
+    }
+    case "user": {
+      const c = (ev.message && ev.message.content) || [];
+      // if this line was already shown optimistically, un-fade it instead of dup-ing.
+      // A plain text prompt lands as a STRING (follow-ups) or a text block (first turn) -
+      // BOTH must dedup, or the string case appends a second solid copy of the faded echo.
+      const echo = (txt) => {
+        const t = txt.trim(); if (!t) return;
+        const i = pendingEcho.findIndex(p => p.text === t);
+        // an optimistic echo already carries its own client-side send time - just un-fade it
+        if (i >= 0) { pendingEcho[i].el.classList.remove("pending"); pendingEcho.splice(i, 1); }
+        else line("me", txt, ev.timestamp);   // e.g. a queued message drained while the app was closed
+      };
+      if (typeof c === "string") { echo(c); break; }
+      for (const b of c) {
+        if (b.type === "text" && b.text) echo(b.text);
+        else if (b.type === "tool_result" && b.is_error) line("err", "↳ tool error");
+      }
+      // a queued message that just started draining is now off the host queue - resync the bar
+      if (queue.length && cur && !cur.fresh) refreshQueue(cur);
+      break;
+    }
+    case "hub_error": line("err", ev.error || "error"); break;
+    case "hub_done":
+      // fallback: if the tail never confirmed an echo (e.g. turn errored early), un-fade it
+      pendingEcho.forEach(p => p.el.classList.remove("pending")); pendingEcho = [];
+      setRunning(false); refresh(); refreshRunning();
+      if (PANE) {
+        try { parent.postMessage({ hubPane: "changed", id: paneKey }, location.origin); } catch (e) {}
+      }
+      // token total for the response just finished, printed under it
+      if (turnSpent) { tokenLine(turnSpent); turnSpent = 0; }
+      refreshUsage();
+      // queued follow-ups drain on the HOST (see daemon run_turn) - just resync the bar to
+      // whatever is left, no client-side squeeze-in to lose on app close.
+      if (cur && !cur.fresh) refreshQueue(cur);
+      break;
+    case "raw": line("dim", ev.text); break;
+  }
+}
+
+// ---- attachments ----
+// Upload each picked file to wherever THIS chat's claude runs (gateway disk, or pushed into
+// the CT), then keep the returned path. On send we prepend the paths so claude Reads them.
+function clearAttach() { attachments = []; renderChips(); }
+function removeAttach(i) { attachments.splice(i, 1); renderChips(); }
+function renderChips() {
+  const bar = $("attachbar");
+  bar.innerHTML = "";
+  if (!attachments.length) { bar.style.display = "none"; return; }
+  bar.style.display = "flex";
+  attachments.forEach((a, i) => {
+    const chip = document.createElement("span");
+    chip.className = "chip" + (a.path ? "" : " up");
+    chip.append("📎 ");
+    const nm = document.createElement("span"); nm.textContent = a.name; chip.append(nm);  // textContent = no HTML injection from filenames
+    const x = document.createElement("button"); x.textContent = "×"; x.onclick = () => removeAttach(i);
+    chip.append(x); bar.append(chip);
+  });
+}
+async function pickFiles(files) {
+  if (!cur) return;
+  if (termModeFor(cur)) {   // terminal: land the bytes where claude runs and TYPE the path into the TUI
+    for (const f of files) {
+      try {
+        const q = `?name=${encodeURIComponent(f.name)}` + (cur.ctid ? `&ctid=${cur.ctid}` : "");
+        const r = await fetch(apiBase(cur.node) + `/api/sessions/${cur.id}/upload${q}`,
+          { method: "POST", body: f }).then(r => r.json());
+        if (r.path) { sendKeys(r.path + " "); if (term) term.focus(); }
+        else if (term) term.write("\r\n\x1b[31m[hub] upload failed: " + (r.error || "?") + "\x1b[0m\r\n");
+      } catch (e) { if (term) term.write("\r\n\x1b[31m[hub] upload failed\x1b[0m\r\n"); }
+    }
+    $("file").value = "";
+    return;
+  }
+  for (const f of files) {
+    const a = { name: f.name, path: null };
+    attachments.push(a); renderChips();
+    try {
+      const q = `?name=${encodeURIComponent(f.name)}` + (cur.ctid ? `&ctid=${cur.ctid}` : "");
+      const r = await fetch(apiBase(cur.node) + `/api/sessions/${cur.id}/upload${q}`,
+        { method: "POST", body: f }).then(r => r.json());
+      if (r.path) { a.path = r.path; }
+      else { line("err", "upload failed: " + (r.error || "?")); attachments.splice(attachments.indexOf(a), 1); }
+    } catch (e) { line("err", "upload failed"); attachments.splice(attachments.indexOf(a), 1); }
+    renderChips();
+  }
+  $("file").value = "";  // let the same file be re-picked later
+}
+
+// Draft safety net: the composer is mirrored to localStorage per session on every
+// keystroke and cleared only at a successful dispatch; every failure path puts the text
+// back in the box. A dead socket, a daemon restart, or the app being killed mid-compose
+// can no longer eat a typed message (it did on 2026-07-25: send() cleared the input
+// BEFORE checking the socket, so enter on a dead socket just vanished the text).
+// COMPACT-ON-REOPEN: reopening a fat chat that went cold means the next turn re-caches
+// the whole context - the one genuinely expensive event. Prefill "/compact" so sending it
+// is one tap ("claude -p" runs /compact as the real built-in). Suggestion only: never
+// clobbers a draft, never fires mid-turn, and typing over it discards it.
+const COMPACT_PCT = 0.6, COMPACT_COLD_S = 2 * 3600;
+function maybeSuggestCompact(s) {
+  if (cur !== s || (s.engine && s.engine !== "claude")) return;
+  if (runningIds.has(s.id)) return;                       // live turn: it would just queue
+  if (ctxTokens < COMPACT_PCT * CTX_MAX) return;
+  if ((Date.now() / 1000 - (s.mtime || 0)) < COMPACT_COLD_S) return;
+  if ($("input").value.trim()) return;                    // a saved draft wins
+  $("input").value = "/compact";
+  updateSendBtn();
+}
+
+function draftKey(s) { return "hubDraft:" + (s ? s.id : ""); }
+function saveDraft() {
+  if (!cur) return;
+  try {
+    const v = $("input").value;
+    if (v.trim()) localStorage.setItem(draftKey(cur), v); else localStorage.removeItem(draftKey(cur));
+  } catch (e) {}
+}
+function clearDraft(s) { try { localStorage.removeItem(draftKey(s || cur)); } catch (e) {} }
+function loadDraft(s) {
+  try {
+    const v = localStorage.getItem(draftKey(s));
+    if (v && !$("input").value.trim()) { $("input").value = v; updateSendBtn(); }
+  } catch (e) {}
+}
+// failed send: put the text back in the box (unless the user already typed something new)
+function restoreText(text) {
+  if (!$("input").value.trim()) { $("input").value = text; updateSendBtn(); }
+  if (cur) saveDraft();
+}
+
+function send() {
+  if (!cur || running) return;
+  let text = $("input").value.trim();
+  const paths = attachments.filter(a => a.path).map(a => a.path);
+  if (!text && !paths.length) return;
+  // Guard the pipe BEFORE touching the composer - the box only empties once the message
+  // has actually been handed off somewhere durable.
+  if (cur.engine === "codex" && cur.fresh) {
+    line("err", "start a new Codex chat in term mode, then use its chat composer");
+    return;
+  }
+  if (!isLocalChat(cur) && cur.engine !== "codex" && (!sock || sock.readyState !== 1)) {
+    line("err", "not connected - reconnecting now, your text is still in the box; send again in a second");
+    connect(cur);   // kick the reconnect immediately instead of waiting for the retry timer
+    return;
+  }
+  if (paths.length) text = paths.join("\n") + (text ? "\n" + text : "");
+  // optimistic echo: show the line instantly (faded = "not yet on disk"). The disk tail
+  // is still the source of truth - when it delivers this same line we un-fade it instead
+  // of appending a dup (see render's user case), and any reconnect repaints from disk.
+  const c = $("chat"); const now = Date.now();
+  maybeDateSep(c, now);
+  const e = el("me pending", text, now);
+  c.appendChild(e); c.scrollTop = c.scrollHeight;
+  pendingEcho.push({ text, el: e });
+  $("input").value = "";
+  clearDraft(cur);
+  clearAttach();
+  setRunning(true);
+  if (isLocalChat(cur)) { sendLocal(cur, text); return; }
+  if (cur.engine === "codex") { sendCodex(cur, text); return; }
+  try {
+    sock.send(JSON.stringify({ type: "user", text, cwd: cur.cwd, new: !!cur.fresh, ctid: cur.ctid, model: cur.model, effort: cur.effort, engine: cur.engine }));
+  } catch (err) {
+    e.remove(); pendingEcho = pendingEcho.filter(p => p.el !== e);
+    restoreText(text);
+    line("err", "send failed - your text is back in the box");
+    setRunning(false);
+    connect(cur);
+    return;
+  }
+  setTimeout(refreshRunning, 1200);  // light up this chat's dot once its turn PID lands
+}
+function interrupt() {
+  // ws can be mid-reconnect on mobile (screen off / backgrounded), which silently drops
+  // the message - so also fire an HTTP interrupt that does not depend on socket state.
+  if (sock && sock.readyState === 1) sock.send(JSON.stringify({ type: "interrupt" }));
+  if (cur && !cur.fresh) fetch(apiBase(cur.node) + `/api/sessions/${cur.id}/interrupt`, { method: "POST" }).catch(() => {});
+}
+
+$("input").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    if (cur && (cur.engine === "codex" || isLocalChat(cur))) {
+      if (!running) send();
+      return;  // no Hub queue for these; use terminal mode to steer an active turn.
+    }
+    if (!running) send();
+    else if ($("input").value.trim()) queueMsg();  // mid-turn Enter queues (never halts)
+  }
+});
+$("input").addEventListener("input", () => { updateSendBtn(); saveDraft(); });
+
+// Mobile keyboard: 100dvh does NOT shrink when the on-screen keyboard opens, and iOS
+// leaves the page scrolled after it dismisses - that stranded scroll is the blank gap
+// under the composer. Drive the body height off the visual viewport (so the composer
+// tracks the keyboard) and pin window scroll to 0 (so nothing is left behind on close).
+// iOS Safari ignores user-scalable=no, so block its pinch-zoom gestures directly.
+["gesturestart", "gesturechange", "gestureend"].forEach(e =>
+  document.addEventListener(e, ev => ev.preventDefault(), { passive: false }));
+// ...and a two-finger doubletap / trackpad ctrl-wheel zoom.
+document.addEventListener("wheel", ev => { if (ev.ctrlKey) ev.preventDefault(); }, { passive: false });
+
+// PANE iframes skip this: the keyboard-tracking hack pins body to a FIXED PIXEL height
+// measured at load, so a later grid reshape / window resize left the composer clipped
+// off the bottom ("no send area"). Plain 100dvh tracks the iframe size natively.
+const vv = window.visualViewport;
+if (vv && !PANE) {
+  // Only drive body height off the visual viewport at natural scale. When the user IS
+  // mid-pinch (scale != 1), matching body to the grown viewport revealed more page to
+  // zoom into - a runaway that let the page zoom out forever. Ignore those frames.
+  const fit = () => {
+    if (Math.abs(vv.scale - 1) > 0.01) return;
+    document.body.style.height = vv.height + "px"; window.scrollTo(0, 0); fitTerm();
+  };
+  vv.addEventListener("resize", () => { fit(); placeModal(); placeAliasBox(); placeCTBox(); });
+  vv.addEventListener("scroll", () => { fit(); placeModal(); placeAliasBox(); placeCTBox(); });
+  fit();
+}
+
+// Installable-PWA plumbing: register the service worker so Firefox/Chrome offer
+// "Install" (needs HTTPS - a secure context; silently skipped over plain http).
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+
+// Phone notifications (web push). The bell only appears where push can work: a secure
+// context (an HTTPS origin) with PushManager support. Subscriptions are
+// per-browser; the daemon pushes on every chat-turn end and the SW suppresses the
+// notification while the app is visible, so ON is the sane steady state on the phone.
+function pushKeyBytes(s) {
+  const pad = "=".repeat((4 - s.length % 4) % 4);
+  return Uint8Array.from(atob((s + pad).replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+}
+async function paintNotif() {
+  if (!isSecureContext || !("PushManager" in window) || !("serviceWorker" in navigator)) return;
+  const btn = $("notifbtn");
+  if (!btn) return;   // bell removed from the header (the ⌘ aliases box took its slot); push stays on
+  btn.style.display = "";
+  let sub = null;
+  try { sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription(); } catch (e) {}
+  btn.classList.toggle("on", !!sub);
+  btn.title = sub ? "phone notifications: on (tap to disable)" : "phone notifications: off (tap to enable)";
+}
+async function toggleNotif() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const have = await reg.pushManager.getSubscription();
+    if (have) {
+      await fetch("/api/push/subscribe", { method: "DELETE", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: have.endpoint }) });
+      await have.unsubscribe();
+    } else {
+      if (await Notification.requestPermission() !== "granted") throw new Error("permission denied");
+      const key = (await (await fetch("/api/push/key")).json()).key;
+      if (!key) throw new Error("push not set up on the server");
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: pushKeyBytes(key) });
+      const r = await fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sub.toJSON()) });
+      if (!r.ok) { await sub.unsubscribe(); throw new Error("server rejected the subscription"); }
+    }
+  } catch (e) { alert("notifications: " + (e.message || e)); }
+  paintNotif();
+}
+paintNotif();
+
+// Aliases box: one place to see every shell alias across the peered nodes. The daemon
+// runs `bash -ic alias` per node and the gateway merges them; we just group + filter here.
+let aliasData = null;
+async function openAliases() {
+  closeNav();
+  $("aliasbox").style.display = "block";
+  placeAliasBox();
+  $("aliasfilter").value = "";
+  $("aliaslist").innerHTML = '<div class="amsg">loading…</div>';
+  try { aliasData = (await (await fetch("/api/aliases")).json()).nodes || []; }
+  catch (e) { aliasData = []; }
+  renderAliases();
+}
+function closeAliases() { $("aliasbox").style.display = "none"; }
+// ---- session sweep: an LLM's per-chat gists + cleanup suggestions, approve-only ----
+// The daemon does the reading (see /api/sweep); this modal just shows the snapshot and
+// applies what you check, through the same archive/DELETE calls swipe/drag use.
+let sweepAt = 0, sweepTimer = null;
+// Header badge: a red dot until you've opened the latest sweep. "seen" = the ran_at of the
+// last snapshot you viewed, kept per-device in localStorage (a sweep is a fleet event, but
+// "have I looked" is personal). refreshSweepBadge polls the cheap /status on a slow cadence.
+let sweepSeen = 0;
+try { sweepSeen = +localStorage.getItem("hubSweepSeen") || 0; } catch (e) {}
+function markSweepSeen(at) {
+  if (!at || at <= sweepSeen) return;
+  sweepSeen = at;
+  try { localStorage.setItem("hubSweepSeen", String(at)); } catch (e) {}
+  $("sweepbtn").classList.remove("hasnew");
+}
+async function refreshSweepBadge() {
+  try {
+    const d = await (await fetch("/api/sweep/status")).json();
+    const isNew = (d.ran_at || 0) > sweepSeen && (d.count || 0) > 0;
+    $("sweepbtn").classList.toggle("hasnew", isNew);
+  } catch (e) {}
+}
+function openSweep() {
+  $("sweepbox").style.display = "block";
+  sweepAt = -1;                     // force a repaint on the first poll
+  pollSweep();
+  sweepTimer = setInterval(pollSweep, 4000);
+}
+function closeSweep() {
+  $("sweepbox").style.display = "none";
+  if (sweepTimer) { clearInterval(sweepTimer); sweepTimer = null; }
+}
+async function pollSweep() {
+  let d; try { d = await (await fetch("/api/sweep")).json(); } catch (e) { return; }
+  if (d.configured === false) {   // no reviewer LLM set on the daemon
+    $("sweepstat").textContent = "sweep not configured - set HUB_SWEEP_LLM";
+    $("sweeprun").disabled = true;
+    $("sweeplist").innerHTML = "";
+    return;
+  }
+  $("sweepstat").textContent =
+    d.running ? "sweeping now - takes a few minutes…" :
+    d.ran_at ? `swept ${age(d.ran_at)} ago${d.model ? " · " + d.model : ""}` :
+    "no sweep yet";
+  $("sweeprun").disabled = !!d.running;
+  // only rebuild the list on NEW results - a rebuild would clobber checkboxes mid-review
+  if (!d.running && (d.ran_at || 0) !== sweepAt) { sweepAt = d.ran_at || 0; paintSweep(d); }
+  if (!d.running && d.ran_at) markSweepSeen(d.ran_at);   // opening the modal clears the badge
+}
+function paintSweep(d) {
+  const box = $("sweeplist");
+  box.innerHTML = "";
+  // an aborted sweep can still carry partial results - show the error AND the rows
+  if (d.error) { const m = document.createElement("div"); m.className = "amsg"; m.textContent = d.error; box.appendChild(m); }
+  // stale snapshot rows for chats that no longer exist (deleted meanwhile) are dropped
+  const live = new Set(sessions.map(s => s.id));
+  const rows = (d.sessions || []).filter(r => live.has(r.id) && !deletedIds.has(r.id));
+  if (!rows.length) { const m = document.createElement("div"); m.className = "amsg"; m.textContent = "nothing to review"; box.appendChild(m); return; }
+  const rk = { delete: 0, archive: 1, keep: 2 };
+  rows.sort((a, b) => (rk[a.rec] ?? 2) - (rk[b.rec] ?? 2) || (b.mtime || 0) - (a.mtime || 0));
+  for (const r of rows) {
+    const div = document.createElement("div");
+    div.className = "swp"; div.dataset.sid = r.id; div.dataset.rec = r.rec;
+    // Checking a row acts on it. Delete rows delete; archive AND keep rows archive - so a
+    // "keep" can be archived from here without leaving the modal. Archive rows come
+    // pre-checked (reversible, the reviewer's own pick); keep and delete need an explicit check.
+    div.dataset.act = r.rec === "delete" ? "delete" : "archive";
+    const chk = `<input type="checkbox" ${r.rec === "archive" ? "checked" : ""} onclick="event.stopPropagation();updateSweepBtn()">`;
+    div.innerHTML = `<div class="top">${chk}<span style="flex:1;min-width:0">`
+      + `<span class="t"></span><span class="gist"></span></span>`
+      + `<span class="rec ${r.rec}">${r.rec}</span></div><div class="detail"></div>`;
+    div.querySelector(".t").textContent = (r.pinned ? "📌 " : "") + (r.stashed ? "📦 " : "") + (dispTitle(r) || "(untitled)");
+    div.querySelector(".gist").textContent = `${r.ct ? "ct:" + r.ct : dispNode(r.node)} · ${age(r.mtime)} - ${r.gist || ""}`;
+    div.querySelector(".detail").textContent = (r.detail || "(no detail)") + (r.reason ? `\n\nwhy ${r.rec}: ${r.reason}` : "");
+    div.querySelector(".top").onclick = () => div.classList.toggle("x");   // expand = the reviewer's mini compact
+    box.appendChild(div);
+  }
+  updateSweepBtn();
+}
+function updateSweepBtn() {
+  const c = [...document.querySelectorAll("#sweeplist .swp input:checked")];
+  const nD = c.filter(x => x.closest(".swp").dataset.act === "delete").length, nA = c.length - nD;
+  const b = $("sweepapply");
+  b.disabled = !c.length;
+  b.textContent = c.length ? `apply${nA ? ` · ${nA} archive` : ""}${nD ? ` · ${nD} delete` : ""}` : "apply";
+}
+async function runSweepNow() {
+  $("sweeprun").disabled = true;
+  try { await fetch("/api/sweep/run", { method: "POST" }); } catch (e) {}
+  pollSweep();
+}
+function applySweep() {
+  const els = [...document.querySelectorAll("#sweeplist .swp input:checked")].map(x => x.closest(".swp"));
+  if (!els.length) return;
+  const nD = els.filter(e => e.dataset.act === "delete").length, nA = els.length - nD;
+  const parts = [];
+  if (nA) parts.push(`archive ${nA}`);
+  if (nD) parts.push(`delete ${nD} (cannot be undone)`);
+  if (!confirm(parts.join(", ") + " - go ahead?")) return;
+  const byId = new Map(sessions.map(s => [s.id, s]));
+  for (const el2 of els) {
+    const id = el2.dataset.sid, kind = el2.dataset.act, s = byId.get(id);
+    if (!s) continue;
+    dropSession(id);
+    if (cur && cur.id === id) freshBlank();   // closing the open chat lands on a usable fresh blank
+    fetch(apiBase(s.node) + `/api/sessions/${id}` + (kind === "archive" ? "/archive" : ""),
+      { method: kind === "archive" ? "POST" : "DELETE" }).catch(() => {});
+    el2.remove();
+  }
+  updateSweepBtn();
+}
+
+// Archived chats: list what's in the on-disk archived/ folders and restore any back to the
+// sidebar. Archive used to be one-way (no UI to reach it); this is the way back.
+function openArchived() { $("archivedbox").style.display = "block"; loadArchived(); }
+function closeArchived() { $("archivedbox").style.display = "none"; }
+async function loadArchived() {
+  const box = $("archivedlist");
+  box.innerHTML = '<div class="amsg">loading…</div>';
+  let d;
+  try { d = await (await fetch("/api/archived")).json(); }
+  catch (e) { box.innerHTML = '<div class="amsg">could not load the archived list</div>'; return; }
+  const items = (d.items || []).filter(r => !deletedIds.has(r.id));
+  box.innerHTML = "";
+  if (!items.length) { box.innerHTML = '<div class="amsg">no archived chats</div>'; return; }
+  for (const r of items) {
+    const div = document.createElement("div");
+    div.className = "arow"; div.dataset.sid = r.id;
+    div.innerHTML = `<span class="who"><span class="t"></span><span class="sub"></span></span><button>restore</button>`;
+    div.querySelector(".t").textContent = r.title || "(untitled)";
+    div.querySelector(".sub").textContent = `${r.ct ? "ct:" + r.ct : dispNode(r.node)} · ${age(r.mtime)} ago`;
+    div.querySelector("button").onclick = () => restoreArchived(r, div);
+    box.appendChild(div);
+  }
+}
+async function restoreArchived(r, div) {
+  const btn = div.querySelector("button");
+  btn.disabled = true; btn.textContent = "…";
+  deletedIds.delete(r.id);   // undo any optimistic hide from an earlier archive
+  try {
+    const j = await (await fetch(apiBase(r.node) + `/api/sessions/${r.id}/unarchive`, { method: "POST" })).json();
+    if (!j.ok) throw new Error(j.error || "failed");
+  } catch (e) { btn.disabled = false; btn.textContent = "retry"; return; }
+  div.remove();
+  refresh();   // rebuild the sidebar so the restored chat shows up again
+  if (!$("archivedlist").querySelector(".arow")) $("archivedlist").innerHTML = '<div class="amsg">no archived chats</div>';
+}
+
+function renderAliases() {
+  if (!aliasData) return;
+  const box = $("aliaslist"), q = ($("aliasfilter").value || "").toLowerCase().trim();
+  box.innerHTML = ""; let shown = 0;
+  for (const n of aliasData) {
+    const items = (n.aliases || []).filter(a =>
+      !q || a.name.toLowerCase().includes(q) || a.value.toLowerCase().includes(q));
+    if (!items.length) continue;
+    shown += items.length;
+    const h = document.createElement("div");
+    h.className = "anode"; h.textContent = n.node + " · " + items.length;
+    box.appendChild(h);
+    for (const a of items) {
+      const row = document.createElement("div");
+      row.className = "arow";
+      const nm = document.createElement("span"); nm.className = "aname"; nm.textContent = a.name;
+      const vl = document.createElement("span"); vl.className = "aval"; vl.textContent = a.value;
+      const run = document.createElement("button");
+      run.className = "arun";
+      row.title = "tap to copy";
+      row.onclick = () => copyAlias(a.value, row);
+      run.textContent = "run"; run.title = "launch on " + n.node;
+      run.onclick = (e) => { e.stopPropagation(); runAlias(n.node, a.name, run); };
+      row.append(nm, vl, run); box.appendChild(row);
+    }
+  }
+  if (!shown) box.innerHTML = '<div class="amsg">' + (q ? "no matches" : "no aliases found") + '</div>';
+}
+function copyAlias(text, row) {
+  if (!navigator.clipboard) return;
+  navigator.clipboard.writeText(text).then(() => {
+    row.classList.add("copied");
+    setTimeout(() => row.classList.remove("copied"), 600);
+  }).catch(() => {});
+}
+// Launch an alias on its own node. The daemon runs it detached and returns a
+// short result; we flash the button and drop a one-line result under the row.
+async function runAlias(node, name, btn) {
+  btn.disabled = true; btn.classList.remove("ok", "err");
+  const orig = btn.textContent; btn.textContent = "…";
+  let res;
+  try {
+    res = await (await fetch(apiBase(node) + "/api/aliases/run", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name })
+    })).json();
+  } catch (e) { res = { ok: false, out: "request failed" }; }
+  btn.disabled = false; btn.textContent = orig;
+  btn.classList.add(res.ok ? "ok" : "err");
+  setTimeout(() => btn.classList.remove("ok", "err"), 2500);
+  const row = btn.parentElement;
+  let out = row.nextElementSibling;
+  if (!out || !out.classList.contains("aout")) {
+    out = document.createElement("div"); out.className = "aout"; row.after(out);
+  }
+  out.textContent = (res.launched ? "▶ " : (res.ok ? "✓ " : "✗ ")) + (res.out || (res.ok ? "done" : "failed"));
+}
+// Keep the box inside the visual viewport on a pinch-zoomed phone (same reason as placeModal).
+function placeAliasBox() {
+  const v = window.visualViewport, m = $("aliasbox");
+  if (!v || m.style.display !== "block") return;
+  const b = m.querySelector(".box"), w = Math.min(480, v.width - 24);
+  b.style.maxWidth = w + "px";
+  b.style.maxHeight = Math.round(v.height * 0.82) + "px";
+  b.style.margin = Math.round(v.offsetTop + v.height * 0.08) + "px 0 24px " +
+                   Math.round(v.offsetLeft + (v.width - w) / 2) + "px";
+}
+function placeCTBox() {
+  const v = window.visualViewport, m = $("ctbox");
+  if (!v || m.style.display !== "block") return;
+  const b = m.querySelector(".box"), w = Math.min(520, v.width - 24);
+  b.style.maxWidth = w + "px";
+  b.style.maxHeight = Math.round(v.height * 0.82) + "px";
+  b.style.margin = Math.round(v.offsetTop + v.height * 0.08) + "px 0 24px " +
+                   Math.round(v.offsetLeft + (v.width - w) / 2) + "px";
+}
+
+// Notification tap -> open that convo (see sw.js notificationclick).
+function openBySid(sid) {
+  if (!sid) return;
+  const s = sessions.find(x => x.id === sid);
+  if (s) open(s);
+}
+if ("serviceWorker" in navigator)
+  navigator.serviceWorker.addEventListener("message", (e) => {
+    if (e.data && e.data.type === "open-session") openBySid(e.data.sid);
+  });
+
+// ---- grid mode (desktop): up to 6 chats at once ----
+// The parent lays out up to 6 iframes; each iframe is THIS page with ?pane=1 and its
+// session object in the hash - a fully live chat (composer, queue, terminal mode) with
+// the sidebar hidden. No daemon changes: a pane talks to the same APIs as a normal tab.
+// Panes never manage the grid; they only postMessage "close me" / "my sid changed".
+let paneKey = null;             // the id the PARENT knows this pane by (pre-rename for fresh chats)
+let gridOn = false;
+let gridSess = [];              // sessions in the grid, slot order (subset fields only)
+const paneEls = new Map();      // gridSess id -> .pane element
+let dragId = null;              // pane id being dragged (phead drag-to-swap)
+// restore the last grid's members; unstarted fresh stubs would re-create a session, drop them.
+// Entries saved before per-pane modes existed default to chat (the send box is the point).
+try { gridSess = JSON.parse(localStorage.getItem("hubGrid") || "[]").filter(s => s && s.id && !s.fresh)
+                     .map(s => (s.mode ? s : { ...s, mode: "chat" })); } catch (e) {}
+function saveGrid() {
+  try { localStorage.setItem("hubGrid", JSON.stringify(gridSess));
+        localStorage.setItem("hubGridOn", gridOn ? "1" : "0"); } catch (e) {}
+}
+function paneSrc(s) { return "/?pane=1#s=" + encodeURIComponent(JSON.stringify(s)); }
+function gridAdd(s) {
+  if (gridSess.some(x => x.id === s.id)) return;                           // already showing
+  if (gridSess.length >= 27) gridRemove(gridSess[gridSess.length - 1].id); // full: replace the newest slot
+  gridSess.push({ id: s.id, node: s.node, ct: s.ct, ctid: s.ctid, cwd: s.cwd,
+                  title: s.title, model: s.model, effort: s.effort, fresh: !!s.fresh,
+                  mode: s.mode || "chat", engine: s.engine });   // panes default to chat view (composer visible)
+  saveGrid(); renderGrid();
+}
+function gridAutofill() {
+  if (PANE) return;
+  let listSess = sessions.filter(s => engMatches(s, engineFilter) && !stashed.has(s.id));   // hibernated chats never autofill
+  listSess.sort((a, b) => (pinned.has(b.id) ? 1 : 0) - (pinned.has(a.id) ? 1 : 0));
+  
+  let added = false;
+  for (const s of listSess) {
+    const visibleCount = gridSess.filter(x => engMatches(x, engineFilter)).length;
+    if (visibleCount >= 9) break;
+    if (gridSess.some(x => x.id === s.id)) continue;
+    gridSess.push({ id: s.id, node: s.node, ct: s.ct, ctid: s.ctid, cwd: s.cwd,
+                    title: s.title, model: s.model, effort: s.effort, fresh: !!s.fresh,
+                    mode: s.mode || "chat", engine: s.engine });
+    added = true;
+  }
+  if (added) saveGrid();
+  renderGrid();
+}
+function gridRemove(id) {
+  if (PANE) return;
+  const i = gridSess.findIndex(x => x.id === id);
+  if (i < 0) return;
+  gridSess.splice(i, 1);
+  const el = paneEls.get(id);
+  if (el) { el.remove(); paneEls.delete(id); }
+  saveGrid(); renderGrid();
+}
+function getGridDim(n) {
+  // cap at 2 rows (never 3); panes fill left-to-right, top row first (row-major, see applyGridPos)
+  const rows = n <= 3 ? 1 : 2;
+  const cols = n === 0 ? 1 : Math.ceil(n / rows);
+  return { rows, cols };
+}
+function renderGrid() {
+  const g = $("grid"), n = gridSess.length;
+  if (!n) { g.innerHTML = '<div id="gridempty">click chats in the sidebar to add them here (up to 27)</div>'; paneEls.clear(); return; }
+  const e = $("gridempty"); if (e) e.remove();
+  const dim = getGridDim(n);
+  g.style.gridTemplateColumns = `repeat(${dim.cols}, 1fr)`;
+  g.style.gridTemplateRows = `repeat(${dim.rows}, 1fr)`;
+  for (const s of gridSess) {          // incremental: never touch live panes (an iframe re-append reloads it)
+    if (paneEls.has(s.id)) continue;
+    const d = document.createElement("div"); d.className = "pane";
+    d.addEventListener("mousedown", () => { d.classList.remove("changed"); }, { passive: true });
+    const h = document.createElement("div"); h.className = "phead";
+    const bd = document.createElement("span"); bd.className = "badge";
+    bd.textContent = s.ct ? "ct:" + s.ct : dispNode(s.node);
+    const c = tagCol(colorFor(s.ct || s.node));
+    bd.style.color = c; bd.style.borderColor = c + "66"; bd.style.background = c + "1e";
+    const em = engineMeta(s);
+    const eg = document.createElement("span"); eg.className = "eng";
+    eg.textContent = em.glyph + " " + em.label; eg.style.color = em.color; eg.title = em.label;
+    const t = document.createElement("span"); t.className = "pt";
+    const dt = titles[s.id] || s.title;
+    t.textContent = dt || (s.fresh ? "(new chat)" : "…");
+    t.title = dt || "";
+    const x = document.createElement("button"); x.textContent = "✕"; x.title = "close pane";
+    x.onclick = () => gridRemove(s.id);   // s is the live gridSess entry: reads the CURRENT id after a fresh-chat rename
+    h.append(bd, eg, t, x); d.appendChild(h);
+    // drag the strip onto another pane to swap slots (drop targets = whole panes)
+    h.draggable = true;
+    h.addEventListener("dragstart", e => {
+      dragId = s.id;
+      e.dataTransfer.setData("text/plain", s.id);
+      e.dataTransfer.effectAllowed = "move";
+      document.body.classList.add("griddrag");
+    });
+    h.addEventListener("dragend", () => {
+      dragId = null;
+      document.body.classList.remove("griddrag");
+      for (const p of paneEls.values()) p.classList.remove("dropt");
+    });
+    d.addEventListener("dragover", e => {
+      if (!dragId || dragId === s.id) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = "move"; d.classList.add("dropt");
+    });
+    d.addEventListener("dragleave", () => d.classList.remove("dropt"));
+    d.addEventListener("drop", e => { e.preventDefault(); d.classList.remove("dropt"); gridSwap(dragId, s.id); });
+    const f = document.createElement("iframe"); f.src = paneSrc(s);
+    d.appendChild(f); g.appendChild(d); paneEls.set(s.id, d);
+  }
+  applyGridPos();
+  gridPaint();
+}
+// Panes sit at EXPLICIT row-major grid coordinates derived from gridSess order (fill the
+// top row left-to-right, then the second), and a swap only rewrites those styles:
+// reordering iframes in the DOM would RELOAD them.
+function applyGridPos() {
+  let visibleCount = 0;
+  gridSess.forEach((s) => {
+    const el = paneEls.get(s.id);
+    if (!el) return;
+    const visible = engMatches(s, engineFilter);
+    el.style.display = visible ? "flex" : "none";
+    if (visible) visibleCount++;
+  });
+  const dim = getGridDim(visibleCount);
+  let idx = 0;
+  gridSess.forEach((s) => {
+    const el = paneEls.get(s.id);
+    if (!el || el.style.display === "none") return;
+    // row-major: fill the top row left-to-right, then wrap to the second row
+    el.style.gridColumn = String((idx % dim.cols) + 1);
+    el.style.gridRow = String(Math.floor(idx / dim.cols) + 1);
+    idx++;
+  });
+  const g = $("grid");
+  if (g) {
+    g.style.gridTemplateColumns = `repeat(${dim.cols}, 1fr)`;
+    g.style.gridTemplateRows = `repeat(${dim.rows}, 1fr)`;
+  }
+}
+function gridSwap(a, b) {
+  const i = gridSess.findIndex(x => x.id === a), j = gridSess.findIndex(x => x.id === b);
+  if (i < 0 || j < 0 || i === j) return;
+  [gridSess[i], gridSess[j]] = [gridSess[j], gridSess[i]];
+  applyGridPos(); saveGrid();
+}
+// pane titles track the session list: a fresh chat starts untitled and Claude's ai-title
+// lands later, so re-pull on every list fetch and persist the newest into hubGrid.
+function gridTitles() {
+  if (PANE) return;   // panes hold a stale localStorage copy of gridSess - never write it back
+  let changed = false;
+  for (const s of gridSess) {
+    const m = sessions.find(x => x.id === s.id);
+    if (!m) continue;
+    if (m.title && m.title !== s.title) { s.title = m.title; changed = true; }
+    if (m.engine && m.engine !== s.engine) { s.engine = m.engine; changed = true; }
+    const el = paneEls.get(s.id), t = el && el.querySelector(".pt");
+    if (t) { const disp = titles[s.id] || s.title; t.textContent = disp; t.title = disp; }
+  }
+  if (changed) saveGrid();
+}
+// sidebar highlight in grid mode = every session currently up in a pane
+function gridPaint() {
+  for (const d of document.querySelectorAll("#list .sess"))
+    d.classList.toggle("active", gridOn ? gridSess.some(s => s.id === d.dataset.sid)
+                                        : !!(cur && cur.id === d.dataset.sid));
+}
+function toggleGrid() {
+  if (PANE) return;
+  gridOn = !gridOn;
+  document.body.classList.toggle("grid", gridOn);
+  $("gridbtn").classList.toggle("on", gridOn);
+  if (gridOn) {
+    if (cur && !cur.fresh) gridAdd(cur);   // seed with the open chat
+    // the panes are the live clients now - drop the single view's connections
+    if (sock) { sock.onclose = null; sock.close(); sock = null; }
+    showChatUI();                          // also closes termSock
+    setRunning(false);
+    clearCur("pick a chat, or + new");   // seen only after the grid closes (#main is hidden while it's on)
+    
+    const visibleCount = gridSess.filter(s => engMatches(s, engineFilter)).length;
+    if (visibleCount === 0) gridAutofill(); else renderGrid();
+  } else {
+    gridPaint();
+  }
+  saveGrid();
+}
+function paneSid(newId) {          // a fresh pane learned its real session id - keep the parent's key in sync
+  try { parent.postMessage({ hubPane: "sid", old: paneKey, id: newId }, location.origin); } catch (e) {}
+  paneKey = newId;
+}
+if (!PANE) window.addEventListener("message", e => {
+  if (e.origin !== location.origin || !e.data || !e.data.hubPane) return;
+  if (e.data.hubPane === "sid") {
+    const s = gridSess.find(x => x.id === e.data.old);
+    if (!s) return;
+    s.id = e.data.id; s.fresh = false;
+    const el = paneEls.get(e.data.old);
+    if (el) { paneEls.delete(e.data.old); paneEls.set(s.id, el); }
+    saveGrid();
+  } else if (e.data.hubPane === "mode") {   // a pane toggled chat/term - remember it for reloads
+    const s = gridSess.find(x => x.id === e.data.id);
+    if (s && (e.data.mode === "chat" || e.data.mode === "term")) { s.mode = e.data.mode; saveGrid(); }
+  } else if (e.data.hubPane === "changed") {
+    const el = paneEls.get(e.data.id);
+    const iframe = el && el.querySelector("iframe");
+    if (el && document.activeElement !== iframe) {
+      el.classList.add("changed");
+    }
+  } else if (e.data.hubPane === "click") {
+    const el = paneEls.get(e.data.id);
+    if (el) el.classList.remove("changed");
+  }
+});
+
+if (PANE) {
+  // one grid cell: resolve the node name (ws routing compares against hubNode), then open
+  // the session handed over in the hash. No list/CT/usage polling - the parent does that.
+  let ps = null;
+  try { ps = JSON.parse(decodeURIComponent(location.hash.slice(3))); } catch (e) {}
+  paneKey = ps && ps.id;
+  if (ps) {
+    if (ps.engine === "codex") codexTermMode = ps.mode === "term";
+    else termMode = ps.mode === "term";   // per-pane view, not the shared hubTerm default
+  }
+  (async () => {
+    try { hubNode = (await (await fetch("/api/node")).json()).node; } catch (e) {}
+    if (ps) open(ps); else $("chat").innerHTML = '<div id="empty">bad pane target</div>';
+  })();
+  const clearOutline = () => {
+    try { parent.postMessage({ hubPane: "click", id: paneKey }, location.origin); } catch (e) {}
+  };
+  window.addEventListener("mousedown", clearOutline, { passive: true });
+  window.addEventListener("touchstart", clearOutline, { passive: true });
+} else {
+  initRowGestures();
+  initRowDrag();
+  updateEngineTabs();
+  layoutControls();   // seat the top-bar controls in #top or the mobile drawer per viewport
+  refresh().then(() => {
+    // cold-start from a notification tap: the SW opened "/#sid=<sid>"
+    const m = location.hash.match(/^#sid=([0-9a-fA-F-]+)$/);
+    if (m) { history.replaceState(null, "", "/"); openBySid(m[1]); }
+    else freshBlank();   // no deep-link: open a ready-to-type blank instead of a dead screen (grid restore below no-ops it)
+  });
+  syncPins(); syncStash(); syncOrder(); syncTitles(); refreshCTs(); refreshUsage(); refreshRunning(); refreshSweepBadge();
+  setInterval(() => { refresh(); syncPins(); syncStash(); syncOrder(); syncTitles(); }, 45000);
+  setInterval(refreshCTs, 60000);
+  setInterval(refreshUsage, 12000);
+  setInterval(refreshRunning, 3500);
+  setInterval(refreshSweepBadge, 120000);   // slow: sweeps are a few hours apart
+  // restore a grid that was left open (desktop only)
+  if (localStorage.getItem("hubGridOn") === "1" && innerWidth > 700 && gridSess.length) toggleGrid();
+}
+</script>
+</body>
+</html>

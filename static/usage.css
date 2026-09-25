@@ -1,0 +1,96 @@
+/* Plan-usage components (Variant A popover + Variant B settings). Dark theme only.
+   Colour tokens follow the hub palette (see :root in index.html). Scoped under .hu. */
+.hu {
+  --bg-panel: #17171d;
+  --bg-page: #101014;
+  --bar-fill: #FFC04B;
+  --bar-fill-oi: #a78bfa;
+  --bar-track-navy: #26262e;
+  --bar-track-gray: #26262e;
+  --text-bright: #f4f4f4;
+  --text-label: #d6d6d4;
+  --text-muted: #919190;
+  --text-muted-warm: #a8a7a0;
+  --text-plan-tag: #c3c2b7;
+  --link: #6da7ec;
+  font-family: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--text-label);
+}
+/* light mode: re-skin the usage panel (incl. the context-window row) to the hub light palette */
+html.light .hu {
+  --bg-panel: #F5F1E8;
+  --bg-page: #ECE7DB;
+  --bar-fill: #2f6fd0;
+  --bar-fill-oi: #7c5cd6;
+  --bar-track-navy: #d8d0be;
+  --bar-track-gray: #d8d0be;
+  --text-bright: #22201c;
+  --text-label: #22201c;
+  --text-muted: #403d34;
+  --text-muted-warm: #403d34;
+  --text-plan-tag: #403d34;
+  --link: #33507f;
+}
+
+/* shared bar: rounded track; fills are absolute so the all-models and Fable/Opus
+   segments share one track (JS orders them wider-first, narrower paints on top) */
+.hu-bar { position: relative; border-radius: 999px; overflow: hidden; }
+.hu-bar > i { position: absolute; top: 0; left: 0; height: 100%; width: 0;
+  background: var(--bar-fill); border-radius: 999px; transition: width .3s ease; }
+.hu-bar > i.hu-fill-oi { background: var(--bar-fill-oi); }
+.hu-oi { color: var(--bar-fill-oi); }
+@media (prefers-reduced-motion: reduce) { .hu-bar > i { transition: none; } }
+
+/* ---------- Variant A: compact popover ---------- */
+.hu-pop { box-sizing: border-box; width: 420px; max-width: 100%;
+  background: var(--bg-panel); border-radius: 12px; padding: 16px 18px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+.hu-pop .hu-ctxrow { display: flex; justify-content: space-between; align-items: baseline; }
+.hu-pop .hu-ctxrow span { color: var(--text-muted); font-size: 13.5px; }
+.hu-pop .hu-ctxbar { height: 4px; margin-top: 8px; background: var(--bar-track-gray); }
+.hu-pop .hu-hdr { display: flex; justify-content: space-between; align-items: center;
+  margin-top: 18px; color: var(--text-muted); font-size: 13.5px; }
+.hu-pop .hu-hdr button { background: none; border: none; padding: 0 2px; cursor: pointer;
+  color: var(--text-muted); font-size: 16px; line-height: 1; }
+.hu-pop .hu-hdr button:hover { color: var(--text-label); }
+.hu-pop .hu-hdr-right { display: flex; align-items: center; gap: 10px; }
+.hu-stamp { color: var(--text-muted); font-size: 12px; }
+.hu-pop .hu-lim { margin-top: 16px; }
+/* the hub sidebar strips the header (and the context row is gone), so the first limit
+   row otherwise stacks its margin on the popover's own padding */
+.hu-pop .hu-lim:first-child { margin-top: 0; }
+.hu-pop .hu-lim .hu-top { display: flex; justify-content: space-between; align-items: baseline; }
+.hu-pop .hu-lim .hu-name { color: var(--text-label); font-size: 14px; font-weight: 600; }
+.hu-pop .hu-lim .hu-right { display: flex; align-items: baseline; gap: 10px; }
+.hu-pop .hu-lim .hu-reset { color: var(--text-muted); font-size: 13.5px; }
+.hu-pop .hu-lim .hu-pct { color: #c9c9c7; font-size: 13.5px; }
+.hu-pop .hu-lim .hu-pct.hu-oi { color: var(--bar-fill-oi); }
+.hu-pop .hu-lim .hu-bar { height: 4px; margin-top: 8px; background: var(--bar-track-gray); }
+
+/* ---------- Variant B: settings section ---------- */
+.hu-set { box-sizing: border-box; background: var(--bg-panel); max-width: 900px; }
+.hu-set .hu-h { margin: 0; color: var(--text-bright); font-size: 17px; font-weight: 600; }
+.hu-set .hu-h .hu-plan { margin-left: 10px; color: var(--text-plan-tag); font-weight: 400; }
+.hu-set .hu-set-stamp { margin-top: 6px; color: var(--text-muted-warm); }
+.hu-set .hu-session { margin-top: 30px; }
+.hu-set .hu-row { display: grid; grid-template-columns: minmax(200px, 1fr) 420px 110px;
+  align-items: center; }
+.hu-set .hu-weekly .hu-row + .hu-row { margin-top: 44px; }
+.hu-set .hu-row .hu-label { color: var(--text-bright); font-size: 15px; font-weight: 600; }
+.hu-set .hu-row .hu-reset { margin-top: 6px; color: var(--text-muted-warm); font-size: 14px; }
+.hu-set .hu-row .hu-bar { height: 8px; background: var(--bar-track-navy); }
+.hu-set .hu-row .hu-pct { text-align: right; color: #cfcfcd; font-size: 14px; }
+.hu-set .hu-row .hu-pct .hu-oi { margin-top: 4px; font-size: 13px; }
+.hu-set .hu-sub { margin-top: 48px; color: var(--text-bright); font-size: 16px; font-weight: 600; }
+.hu-set .hu-learn { display: inline-block; margin-top: 24px; color: var(--link);
+  font-size: 14px; text-decoration: underline; }
+.hu-set .hu-weekly { margin-top: 28px; }
+
+/* Mobile: the 3-column grid (730px min) can't fit a phone - stack each row to
+   label / bar / percent in a single column. */
+@media (max-width: 700px) {
+  .hu-set { max-width: 100%; }
+  .hu-set .hu-row { grid-template-columns: 1fr; row-gap: 8px; }
+  .hu-set .hu-row .hu-pct { text-align: left; }
+  .hu-set .hu-weekly .hu-row + .hu-row { margin-top: 28px; }
+}
