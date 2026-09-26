@@ -68,3 +68,11 @@ Extracted from a switchboard that has run a multi-machine homelab daily since
 mid-2026. The extraction is fresh; expect rough edges where your setup differs
 from the one it grew up in. Issues welcome.
 
+## Author
+
+Built by [Matthew Noh](https://www.matthewnoh.com), a product designer in Dallas.
+The case study is at
+[matthewnoh.com/work/soele](https://www.matthewnoh.com/work/soele/), and more
+projects like this live under
+[Floral Overcast](https://github.com/Floral-Overcast).
+
