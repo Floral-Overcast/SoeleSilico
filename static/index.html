@@ -779,8 +779,9 @@ function tagCol(hex) {
 // session list ("gemini" = Antigravity, anything else = Claude); the model is only known
 // when the client set it (new-chat target / model dropdown) - the daemon does not yet
 // report the model a past session actually ran on, so we fall back to the engine name.
-const MODEL_NAMES = { "claude-opus-4-8": "Opus", "claude-sonnet-5": "Sonnet",
-  "claude-fable-5": "Fable", "claude-haiku-4-5-20251001": "Haiku" };
+const MODEL_NAMES = { "claude-opus-5-5": "Opus", "claude-sonnet-5-5": "Sonnet", "claude-haiku-5-5": "Haiku",
+  "claude-fable-5-2": "Fable", "claude-fable-5-1": "Fable", "claude-fable-5": "Fable",
+  "claude-opus-4-8": "Opus", "claude-sonnet-5": "Sonnet", "claude-haiku-4-5-20251001": "Haiku" };
 function modelLabel(m, eng) {
   if (!m) return "";
   if (MODEL_NAMES[m]) return MODEL_NAMES[m];
@@ -1583,10 +1584,10 @@ function updateEngineBadge() {
 }
 const CLAUDE_MODELS = [
   { id: "", name: "Default (node pin)" },
-  { id: "claude-opus-4-8", name: "Opus" },
-  { id: "claude-sonnet-5", name: "Sonnet" },
-  { id: "claude-fable-5", name: "Fable" },
-  { id: "claude-haiku-4-5-20251001", name: "Haiku" },
+  { id: "claude-opus-5-5", name: "Opus" },
+  { id: "claude-sonnet-5-5", name: "Sonnet" },
+  { id: "claude-fable-5-2", name: "Fable" },
+  { id: "claude-haiku-5-5", name: "Haiku" },
 ];
 const EFFORTS = ["low", "medium", "high", "max"];
 function closeModelMenu() { const m = $("modelmenu"); if (m) m.remove(); }
